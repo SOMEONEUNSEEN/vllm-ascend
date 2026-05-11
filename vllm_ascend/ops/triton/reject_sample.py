@@ -399,70 +399,69 @@ def rejection_random_sample_block_verify_kernel(
                     output_token_ids_ptr + req_idx * (max_spec_len + 1),
                     bonus_token_id,
                 )
-                continue
-
-            accepted_len = 0
-            prefix_prob = 1.0
-            for pos in range(num_draft_tokens):
-                token_idx = start_idx + pos
-                draft_token_id = tl.load(draft_token_ids_ptr + token_idx)
-                target_prob = tl.load(target_probs_ptr + token_idx * vocab_size + draft_token_id)
-
-                if NO_DRAFT_PROBS:
-                    draft_prob = 1.0
-                else:
-                    draft_prob = tl.load(draft_probs_ptr + token_idx * vocab_size + draft_token_id)
-
-                if draft_prob > 0:
-                    prefix_prob = min(prefix_prob * target_prob / draft_prob, 1.0)
-                else:
-                    prefix_prob = 0.0
-
-                if pos == num_draft_tokens - 1:
-                    h_block = prefix_prob
-                else:
-                    next_token_idx = token_idx + 1
-                    if NO_DRAFT_PROBS:
-                        next_draft_token_id = tl.load(draft_token_ids_ptr + next_token_idx)
-                        next_target_prob = tl.load(target_probs_ptr + next_token_idx * vocab_size + next_draft_token_id)
-                        residual_mass = prefix_prob * (1.0 - next_target_prob)
-                    else:
-                        residual_mass = 0.0
-                        for loop_i in range(loop):
-                            vocab_start = loop_i * SUB_BLOCK
-                            vocab_offset = vocab_start + tl.arange(0, SUB_BLOCK)
-                            next_draft_prob = tl.load(
-                                draft_probs_ptr + next_token_idx * vocab_size + vocab_offset,
-                                mask=vocab_offset < vocab_size,
-                                other=0,
-                            )
-                            next_target_prob = tl.load(
-                                target_probs_ptr + next_token_idx * vocab_size + vocab_offset,
-                                mask=vocab_offset < vocab_size,
-                                other=0,
-                            )
-                            residual_prob = tl.maximum(prefix_prob * next_target_prob - next_draft_prob, 0.0)
-                            residual_mass += tl.sum(residual_prob, axis=0)
-                    denom = residual_mass + 1.0 - prefix_prob
-                    h_block = residual_mass / denom if denom > 0 else 0.0
-
-                uniform_prob = tl.load(uniform_probs_ptr + token_idx)
-                if uniform_prob <= h_block:
-                    accepted_len = pos + 1
-
-            for pos in range(accepted_len):
-                token_id = tl.load(draft_token_ids_ptr + start_idx + pos)
-                tl.store(output_token_ids_ptr + req_idx * (max_spec_len + 1) + pos, token_id)
-
-            if accepted_len == num_draft_tokens:
-                bonus_token_id = tl.load(bonus_token_ids_ptr + req_idx)
-                tl.store(output_token_ids_ptr + req_idx * (max_spec_len + 1) + num_draft_tokens, bonus_token_id)
             else:
-                recovered_token_id = tl.load(recovered_token_ids_ptr + start_idx + accepted_len)
-                tl.store(
-                    output_token_ids_ptr + req_idx * (max_spec_len + 1) + accepted_len,
-                    recovered_token_id,
-                )
+                accepted_len = 0
+                prefix_prob = 1.0
+                for pos in range(num_draft_tokens):
+                    token_idx = start_idx + pos
+                    draft_token_id = tl.load(draft_token_ids_ptr + token_idx)
+                    target_prob = tl.load(target_probs_ptr + token_idx * vocab_size + draft_token_id)
+
+                    if NO_DRAFT_PROBS:
+                        draft_prob = 1.0
+                    else:
+                        draft_prob = tl.load(draft_probs_ptr + token_idx * vocab_size + draft_token_id)
+
+                    if draft_prob > 0:
+                        prefix_prob = min(prefix_prob * target_prob / draft_prob, 1.0)
+                    else:
+                        prefix_prob = 0.0
+
+                    if pos == num_draft_tokens - 1:
+                        h_block = prefix_prob
+                    else:
+                        next_token_idx = token_idx + 1
+                        if NO_DRAFT_PROBS:
+                            next_draft_token_id = tl.load(draft_token_ids_ptr + next_token_idx)
+                            next_target_prob = tl.load(target_probs_ptr + next_token_idx * vocab_size + next_draft_token_id)
+                            residual_mass = prefix_prob * (1.0 - next_target_prob)
+                        else:
+                            residual_mass = 0.0
+                            for loop_i in range(loop):
+                                vocab_start = loop_i * SUB_BLOCK
+                                vocab_offset = vocab_start + tl.arange(0, SUB_BLOCK)
+                                next_draft_prob = tl.load(
+                                    draft_probs_ptr + next_token_idx * vocab_size + vocab_offset,
+                                    mask=vocab_offset < vocab_size,
+                                    other=0,
+                                )
+                                next_target_prob = tl.load(
+                                    target_probs_ptr + next_token_idx * vocab_size + vocab_offset,
+                                    mask=vocab_offset < vocab_size,
+                                    other=0,
+                                )
+                                residual_prob = tl.maximum(prefix_prob * next_target_prob - next_draft_prob, 0.0)
+                                residual_mass += tl.sum(residual_prob, axis=0)
+                        denom = residual_mass + 1.0 - prefix_prob
+                        h_block = residual_mass / denom if denom > 0 else 0.0
+
+                    uniform_prob = tl.load(uniform_probs_ptr + token_idx)
+                    if uniform_prob <= h_block:
+                        accepted_len = pos + 1
+
+                for pos in range(accepted_len):
+                    token_id = tl.load(draft_token_ids_ptr + start_idx + pos)
+                    tl.store(output_token_ids_ptr + req_idx * (max_spec_len + 1) + pos, token_id)
+
+                if accepted_len == num_draft_tokens:
+                    bonus_token_id = tl.load(bonus_token_ids_ptr + req_idx)
+                    tl.store(output_token_ids_ptr + req_idx * (max_spec_len + 1) + num_draft_tokens, bonus_token_id)
+                else:
+                    recovered_token_id = tl.load(recovered_token_ids_ptr + start_idx + accepted_len)
+                    tl.store(
+                        output_token_ids_ptr + req_idx * (max_spec_len + 1) + accepted_len,
+                        recovered_token_id,
+                    )
 
 
 @triton.jit(do_not_specialize=["max_sepc_len"])
