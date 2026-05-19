@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-
+from vllm.logger import logger
 import torch
 from vllm.triton_utils import HAS_TRITON, triton
 from vllm.v1.sample.metadata import SamplingMetadata
@@ -115,7 +115,9 @@ def rejection_sample(
     # When num_speculative_tokens>=3, using block verify.
     # Skip block verify when draft_probs is None (suffix/ngram methods)
     # to avoid incorrect verification results.
+    # using_block_verify = max_spec_len >= 3 and draft_probs is not None
     using_block_verify = max_spec_len >= 3
+    logger.info_once(f"using block verify {using_block_verify}")
 
     # Create output buffer.
     output_token_ids = torch.empty(
@@ -124,7 +126,8 @@ def rejection_sample(
         device=device,
     )
     output_token_ids.fill_(PLACEHOLDER_TOKEN_ID)
-
+    logger.info_once(f"sampling_metadata.all_greedy = {sampling_metadata.all_greedy}")
+    logger.info_once(f"sampling_metadata.all_random = {sampling_metadata.all_random}")
     if sampling_metadata.all_greedy:
         is_greedy = None
     else:
@@ -198,6 +201,7 @@ def rejection_sample(
     if not using_block_verify:
         # Rejection sampling for random sampling requests.
         if HAS_TRITON:
+            logger.info_once(f"sample method = {rejection_random_sample}")
             rejection_random_sample_kernel[(grid,)](
                 output_token_ids,
                 cu_num_draft_tokens,
@@ -233,6 +237,7 @@ def rejection_sample(
     else:
         # MagicMTP: Improving acceptance rate with Block Verify.
         if HAS_TRITON:
+            logger.info_once(f"sample method = {block_verify}")
             rejection_random_sample_block_verify_kernel[(grid,)](
                 output_token_ids,
                 cu_num_draft_tokens,
