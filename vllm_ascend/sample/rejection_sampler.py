@@ -15,8 +15,6 @@ from vllm_ascend.ops.triton.reject_sample import (
     expand_triton,
     rejection_greedy_sample_with_triton,
     rejection_random_sample_block_verify_kernel,
-    rejection_random_sample_entropy_verify_kernel,
-    rejection_random_sample_entropy_and_block_verify_kernel,
     rejection_random_sample_kernel,
     sample_recovered_tokens_kernel,
 )
@@ -118,9 +116,6 @@ def rejection_sample(
     # Skip block verify when draft_probs is None (suffix/ngram methods)
     # to avoid incorrect verification results.
     using_block_verify = max_spec_len >= 3
-    using_entropy_verify = False
-    posterior_threshold: float = 0.09
-    posterior_alpha: float = 0.3
 
     # Create output buffer.
     output_token_ids = torch.empty(
@@ -200,79 +195,7 @@ def rejection_sample(
         device,
         use_block_verify=using_block_verify,
     )
-    if using_entropy_verify and using_block_verify:
-        if HAS_TRITON:
-            rejection_random_sample_entropy_and_block_verify_kernel[(grid,)](
-                output_token_ids,
-                cu_num_draft_tokens,
-                draft_token_ids,
-                draft_probs,
-                target_probs,
-                bonus_token_ids,
-                recovered_token_ids,
-                is_greedy,
-                max_spec_len,
-                vocab_size,
-                grid,
-                block_size,
-                posterior_threshold=posterior_threshold,
-                posterior_alpha=posterior_alpha,
-            )
-    elif using_entropy_verify:
-        if HAS_TRITON:
-            rejection_random_sample_entropy_verify_kernel[(grid,)](
-                output_token_ids,
-                cu_num_draft_tokens,
-                draft_token_ids,
-                draft_probs,
-                target_probs,
-                bonus_token_ids,
-                recovered_token_ids,
-                is_greedy,
-                max_spec_len,
-                vocab_size,
-                batch_size,
-                NO_DRAFT_PROBS=draft_probs is None,
-                BLOCK_SIZE=block_size,
-                POSTERIOR_THRESHOLD=posterior_threshold,
-                POSTERIOR_ALPHA=posterior_alpha,
-            )
-    elif using_block_verify:
-        # MagicMTP: Improving acceptance rate with Block Verify.
-        if HAS_TRITON:
-            rejection_random_sample_block_verify_kernel[(grid,)](
-                output_token_ids,
-                cu_num_draft_tokens,
-                draft_token_ids,
-                draft_probs,
-                target_probs,
-                bonus_token_ids,
-                recovered_token_ids,
-                uniform_probs.to(torch.float32),
-                is_greedy,
-                max_spec_len,
-                vocab_size,
-                batch_size,
-                NO_DRAFT_PROBS=draft_probs is None,
-                BLOCK_SIZE=block_size,
-                SUB_BLOCK=4 * 1024,
-            )
-        else:
-            rejection_random_sample_block_verify_pytorch(
-                output_token_ids,
-                cu_num_draft_tokens,
-                draft_token_ids,
-                draft_probs,
-                target_probs,
-                bonus_token_ids,
-                recovered_token_ids,
-                uniform_probs,
-                is_greedy,
-                max_spec_len,
-                vocab_size,
-                IS_NGRAM=draft_probs is None,
-            )
-    else:
+    if not using_block_verify:
         # Rejection sampling for random sampling requests.
         if HAS_TRITON:
             rejection_random_sample_kernel[(grid,)](
@@ -306,6 +229,41 @@ def rejection_sample(
                 vocab_size,
                 IS_NGRAM=draft_probs is None,
                 # num_warps=1,
+            )
+    else:
+        # MagicMTP: Improving acceptance rate with Block Verify.
+        if HAS_TRITON:
+            rejection_random_sample_block_verify_kernel[(grid,)](
+                output_token_ids,
+                cu_num_draft_tokens,
+                draft_token_ids,
+                draft_probs,
+                target_probs,
+                bonus_token_ids,
+                recovered_token_ids,
+                uniform_probs.to(torch.float32),
+                is_greedy,
+                max_spec_len,
+                vocab_size,
+                batch_size,
+                NO_DRAFT_PROBS=draft_probs is None,
+                BLOCK_SIZE=block_size,
+                SUB_BLOCK=4 * 1024,
+            )
+        else:
+            rejection_random_sample_block_verify_pytorch(
+                output_token_ids,
+                cu_num_draft_tokens,
+                draft_token_ids,
+                draft_probs,
+                target_probs,
+                bonus_token_ids,
+                recovered_token_ids,
+                uniform_probs,
+                is_greedy,
+                max_spec_len,
+                vocab_size,
+                IS_NGRAM=draft_probs is None,
             )
     return output_token_ids
 
@@ -363,7 +321,6 @@ def sample_recovered_tokens(
     sampling_metadata: SamplingMetadata,
     device: torch.device,
     use_block_verify: bool = False,
-    use_entropy_verify: bool = False,
 ) -> torch.Tensor:
     batch_size = len(num_draft_tokens)
     vocab_size = target_probs.shape[-1]
