@@ -240,6 +240,10 @@ def rejection_sample(
                 vocab_size,
                 IS_NGRAM=draft_probs is None,
                 # num_warps=1,
+                ENTROPY_VERIFY=using_entropy_verify,
+                POSTERIOR_THRESHOLD=0.95,
+                POSTERIOR_ALPHA=0.4,
+                EPSILON=1e-10,
             )
     else:
         # MagicMTP: Improving acceptance rate with Block Verify.
@@ -283,6 +287,10 @@ def rejection_sample(
                 max_spec_len,
                 vocab_size,
                 IS_NGRAM=draft_probs is None,
+                ENTROPY_VERIFY=using_entropy_verify,
+                POSTERIOR_THRESHOLD=0.95,
+                POSTERIOR_ALPHA=0.4,
+                EPSILON=1e-10,
             )
     return output_token_ids
 
@@ -470,6 +478,10 @@ def rejection_random_sample_pytorch(
     max_spec_len,
     vocab_size,
     IS_NGRAM=False,
+    ENTROPY_VERIFY=False,
+    POSTERIOR_THRESHOLD=0.95,
+    POSTERIOR_ALPHA=0.4,
+    EPSILON=1e-10,
 ):
     """
     This function implements the Speculative Decoding rejection sampling step.
@@ -533,9 +545,20 @@ def rejection_random_sample_pytorch(
     zero_threshold_cpu = torch.tensor([0.0], pin_memory=True, dtype=torch.float32)
     zero_threshold = zero_threshold_cpu.to(device, non_blocking=True)
 
-    acceptance_condition = (draft_token_probs > zero_threshold) & (
-        target_token_probs / draft_token_probs >= uniform_token_probs
-    )
+    if ENTROPY_VERIFY:
+        all_target_dist = target_probs[global_token_indices]
+        entropy = -(all_target_dist * torch.log(all_target_dist + EPSILON)).sum(dim=-1)
+        exp_neg_entropy = torch.exp(-entropy * POSTERIOR_ALPHA)
+        posterior_threshold_device = torch.tensor(POSTERIOR_THRESHOLD, device=device, dtype=torch.float32)
+        threshold = torch.minimum(exp_neg_entropy, posterior_threshold_device)
+        modified_uniform_token_probs = threshold * uniform_token_probs
+        acceptance_condition = (draft_token_probs > zero_threshold) & (
+            target_token_probs / draft_token_probs >= modified_uniform_token_probs
+        )
+    else:
+        acceptance_condition = (draft_token_probs > zero_threshold) & (
+            target_token_probs / draft_token_probs >= uniform_token_probs
+        )
 
     first_rejection = (~acceptance_condition) & valid_mask
 
@@ -731,6 +754,10 @@ def rejection_random_sample_block_verify_pytorch(
     max_spec_len,
     vocab_size,
     IS_NGRAM=False,
+    ENTROPY_VERIFY=False,
+    POSTERIOR_THRESHOLD=0.95,
+    POSTERIOR_ALPHA=0.4,
+    EPSILON=1e-10,
 ):
     batch_size = output_token_ids.shape[0]
     device = output_token_ids.device
@@ -767,8 +794,18 @@ def rejection_random_sample_block_verify_pytorch(
     pi = target_token_probs / draft_token_probs
     pi = pi.clamp(max=1.0)
     pi = torch.cumprod(pi, dim=-1)
-    uniform_token_probs = torch.cumprod(uniform_token_probs, dim=-1)
-    legal_mask = (draft_token_probs > 0) & (pi >= uniform_token_probs)
+    cum_uniform_token_probs = torch.cumprod(uniform_token_probs, dim=-1)
+
+    if ENTROPY_VERIFY:
+        all_target_dist = target_probs[global_token_indices]
+        entropy = -(all_target_dist * torch.log(all_target_dist + EPSILON)).sum(dim=-1)
+        exp_neg_entropy = torch.exp(-entropy * POSTERIOR_ALPHA)
+        posterior_threshold_device = torch.tensor(POSTERIOR_THRESHOLD, device=device, dtype=torch.float32)
+        threshold = torch.minimum(exp_neg_entropy, posterior_threshold_device)
+        modified_cum_uniform_token_probs = threshold * cum_uniform_token_probs
+        legal_mask = (draft_token_probs > 0) & (pi >= modified_cum_uniform_token_probs)
+    else:
+        legal_mask = (draft_token_probs > 0) & (pi >= cum_uniform_token_probs)
     legal_mask = legal_mask & valid_mask
 
     last_accept_pos = torch.where(
