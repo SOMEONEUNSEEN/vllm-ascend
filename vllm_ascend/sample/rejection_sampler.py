@@ -19,6 +19,7 @@ from vllm_ascend.ops.triton.reject_sample import (
     sample_recovered_tokens_kernel,
 )
 from vllm_ascend.sample.sampler import apply_top_k_top_p
+from vllm_ascend.ascend_config import get_ascend_config
 
 
 def apply_sampling_constraints(
@@ -115,7 +116,8 @@ def rejection_sample(
     # When num_speculative_tokens>=3, using block verify.
     # Skip block verify when draft_probs is None (suffix/ngram methods)
     # to avoid incorrect verification results.
-    using_block_verify = max_spec_len >= 3 and draft_probs is not None
+    using_block_verify = max_spec_len >= 3 if get_ascend_config().enable_block_verify else False
+    using_entropy_verify = True if get_ascend_config().enable_entropy_verify else False
 
     # Create output buffer.
     output_token_ids = torch.empty(

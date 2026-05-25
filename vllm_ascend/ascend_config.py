@@ -210,6 +210,10 @@ class AscendConfig:
         self.sparse_json = self.hamming_sparse["sparse_json_location"]
         self._check_enable_hamming_sparse()
 
+        # Enable Block Verify and Entropy Verify in Rejection Sampler
+        self.enable_block_verify = additional_config.get("enable_block_verify", False)
+        self.enable_entropy_verify = additional_config.get("enable_entropy_verify", False)
+
     def _check_mix_placement(self):
         if self.mix_placement:
             if self.enable_shared_expert_dp or self.multistream_overlap_shared_expert:
