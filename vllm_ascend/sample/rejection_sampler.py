@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-
+from vllm.logger import logger
 import torch
 from vllm.triton_utils import HAS_TRITON, triton
 from vllm.v1.sample.metadata import SamplingMetadata
@@ -15,6 +15,7 @@ from vllm_ascend.ops.triton.reject_sample import (
     expand_triton,
     rejection_greedy_sample_with_triton,
     rejection_random_sample_block_verify_kernel,
+    rejection_random_sample_block_or_entropy_verify_kernel,
     rejection_random_sample_kernel,
     sample_recovered_tokens_kernel,
 )
@@ -118,6 +119,9 @@ def rejection_sample(
     # to avoid incorrect verification results.
     using_block_verify = max_spec_len >= 3 if get_ascend_config().enable_block_verify else False
     using_entropy_verify = True if get_ascend_config().enable_entropy_verify else False
+    logger.info_once(f"enable_block_verify: {get_ascend_config().enable_block_verify}, enable_entropy_verify: {get_ascend_config().enable_entropy_verify}")
+    logger.info_once(f"using_block_verify: {using_block_verify}, using_entropy_verify: {using_entropy_verify}")
+    logger.info_once(f"sampling_metadata.all_greedy: {sampling_metadata.all_greedy}, sampling_metadata.all_random: {sampling_metadata.all_random}")
 
     # Create output buffer.
     output_token_ids = torch.empty(
@@ -199,6 +203,7 @@ def rejection_sample(
     if not using_block_verify:
         # Rejection sampling for random sampling requests.
         if HAS_TRITON:
+            logger.info_once(f"rejection_random_sample_kernel")
             rejection_random_sample_kernel[(grid,)](
                 output_token_ids,
                 cu_num_draft_tokens,
@@ -214,6 +219,11 @@ def rejection_sample(
                 batch_size,
                 NO_DRAFT_PROBS=draft_probs is None,
                 BLOCK_SIZE=block_size,
+                ENTROPY_VERIFY=using_entropy_verify,
+                POSTERIOR_THRESHOLD=0.95,
+                POSTERIOR_ALPHA=0.4,
+                SUB_BLOCK=4 * 1024,
+                EPSILON=1e-10,
             )
         else:
             rejection_random_sample_pytorch(
@@ -233,8 +243,11 @@ def rejection_sample(
             )
     else:
         # MagicMTP: Improving acceptance rate with Block Verify.
+        # entropy_verify: Improving acceptance rate with entropy Verify.
         if HAS_TRITON:
-            rejection_random_sample_block_verify_kernel[(grid,)](
+            logger.info_once(
+                f"rejection_random_sample_block_verify={using_block_verify}, rejection_random_sample_entropy_verify={using_entropy_verify}")
+            rejection_random_sample_block_or_entropy_verify_kernel[(grid,)](
                 output_token_ids,
                 cu_num_draft_tokens,
                 draft_token_ids,
@@ -249,6 +262,12 @@ def rejection_sample(
                 batch_size,
                 NO_DRAFT_PROBS=draft_probs is None,
                 BLOCK_SIZE=block_size,
+                # BLOCK_VERIFY=using_block_verify,
+                ENTROPY_VERIFY=using_entropy_verify,
+                POSTERIOR_THRESHOLD=0.95,
+                POSTERIOR_ALPHA=0.4,
+                SUB_BLOCK=4 * 1024,
+                EPSILON=1e-10,
             )
         else:
             rejection_random_sample_block_verify_pytorch(
