@@ -117,9 +117,9 @@ def rejection_sample(
     # When num_speculative_tokens>=3, using block verify.
     # Skip block verify when draft_probs is None (suffix/ngram methods)
     # to avoid incorrect verification results.
-    using_block_verify = max_spec_len >= 3 if get_ascend_config().enable_block_verify else False
-    using_entropy_verify = True if get_ascend_config().enable_entropy_verify else False
-    logger.info_once(f"enable_block_verify: {get_ascend_config().enable_block_verify}, enable_entropy_verify: {get_ascend_config().enable_entropy_verify}")
+    using_block_verify = max_spec_len >= 3 if get_ascend_config().rejection_sampler_config.enable_block_verify else False
+    using_entropy_verify = True if get_ascend_config().rejection_sampler_config.enable_entropy_verify else False
+    logger.info_once(f"enable_block_verify: {get_ascend_config().rejection_sampler_config.enable_block_verify}, enable_entropy_verify: {get_ascend_config().rejection_sampler_config.enable_entropy_verify}")
     logger.info_once(f"using_block_verify: {using_block_verify}, using_entropy_verify: {using_entropy_verify}")
     logger.info_once(f"sampling_metadata.all_greedy: {sampling_metadata.all_greedy}, sampling_metadata.all_random: {sampling_metadata.all_random}")
 
