@@ -228,17 +228,15 @@ def rejection_random_sample_kernel(
                     uniform_prob = tl.load(uniform_probs_ptr + token_idx)
 
                     if ENTROPY_VERIFY:
-                        _entropy_vocab_size = ori_vocab_size if ori_vocab_size > 0 else vocab_size
-                        _entropy_probs_ptr = ori_target_probs_ptr if ori_vocab_size > 0 else target_probs_ptr
-                        loop = (_entropy_vocab_size + SUB_BLOCK - 1) // SUB_BLOCK
+                        loop = (vocab_size + SUB_BLOCK - 1) // SUB_BLOCK
                         entropy = 0.0
                         for loop_i in range(loop):
                             vocab_start = loop_i * SUB_BLOCK
                             vocab_offset = vocab_start + tl.arange(0, SUB_BLOCK)
-                            vocab_mask = vocab_offset < _entropy_vocab_size
-                            probs = tl.load(
-                                _entropy_probs_ptr + token_idx * _entropy_vocab_size + vocab_offset, vocab_mask, other=0
-                            )
+                            vocab_mask = vocab_offset < vocab_size
+                            probs = tl.load(target_probs_ptr + (start_idx + pos) * vocab_size + vocab_offset,
+                                            vocab_mask,
+                                            other=0)
                             log_probs = tl.log(probs + EPSILON)
                             entropy_contrib = -probs * log_probs
                             entropy += tl.sum(entropy_contrib)
