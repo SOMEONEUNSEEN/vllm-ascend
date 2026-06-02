@@ -27,8 +27,8 @@
 #include "tiling/tiling_api.h"
 #include "exe_graph/runtime/tiling_context.h"
 #include "register/op_def_registry.h"
-#include "../op_kernel/compressor_template_tiling_key.h"
-#include "../op_kernel/compressor_tiling_data.h"
+#include "../../op_kernel/arch32/compressor_template_tiling_key.h"
+#include "../../op_kernel/arch32/compressor_tiling_data.h"
 #include "platform/platform_info.h"
 
 #ifdef ASCENDC_OP_TEST
@@ -114,8 +114,8 @@ const std::map<std::string, std::vector<ge::DataType>> DTYPE_SUPPORT_MAP = {
     {STATE_CACHE_NAME,        {ge::DT_FLOAT}},
     {APE_NAME,                {ge::DT_FLOAT}},
     {NORM_WEIGHT_NAME,        {ge::DT_BF16, ge::DT_FLOAT16}},
-    {ROPE_SIN_NAME,           {ge::DT_BF16, ge::DT_FLOAT16}},
-    {ROPE_COS_NAME,           {ge::DT_BF16, ge::DT_FLOAT16}},
+    {ROPE_SIN_NAME,           {ge::DT_BF16, ge::DT_FLOAT16, ge::DT_FLOAT}},
+    {ROPE_COS_NAME,           {ge::DT_BF16, ge::DT_FLOAT16, ge::DT_FLOAT}},
     {STATE_BLOCK_TABLE_NAME,  {ge::DT_INT32}},
     {CU_SEQLENS_NAME,         {ge::DT_INT32}},
     {SEQUSED_NAME,            {ge::DT_INT32}},
@@ -268,7 +268,7 @@ struct CompressorContext {
     const float *normEps;
     const int *rotaryMode;
     const int *cacheMode;
-    const int *stride;
+    const int *stateCacheStrideDim0;
     TemplateId templateId;
 
     ge::DataType dtype = ge::DT_BF16;
@@ -345,6 +345,7 @@ private:
     ge::graphStatus CheckShapeConsistency() const;
     ge::graphStatus CheckShapeConsistencyRope() const;
     ge::graphStatus CheckDtypeConsistencyX(const gert::CompileTimeTensorDesc *desc, const std::string &name) const;
+    ge::graphStatus CheckDtypeConsistencyRope() const;
     ge::graphStatus CheckDtypeConsistency() const;
     ge::graphStatus CheckMultiParaConsistency() const;
     ge::graphStatus CheckDimNumConsistency() const;

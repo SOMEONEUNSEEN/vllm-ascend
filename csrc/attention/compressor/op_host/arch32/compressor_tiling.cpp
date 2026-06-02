@@ -96,7 +96,7 @@ ge::graphStatus CompressorTiling::ConvertContext(gert::TilingContext &context, C
     compressorContext.normEps = attrs->GetAttrPointer<float>(NORM_EPS_ATTR_INDEX);
     compressorContext.rotaryMode = attrs->GetAttrPointer<int>(ROTARY_MODE_ATTR_INDEX);
     compressorContext.cacheMode = attrs->GetAttrPointer<int>(CACHE_MODE_ATTR_INDEX);
-    compressorContext.stride = attrs->GetAttrPointer<int>(STATE_CACHE_STRIDE_DIM0_ATTR_INDEX);
+    compressorContext.stateCacheStrideDim0 = attrs->GetAttrPointer<int>(STATE_CACHE_STRIDE_DIM0_ATTR_INDEX);
 
     OP_CHECK_IF(context.GetWorkspaceSizes(1) == nullptr,
                OPS_REPORT_VECTOR_INNER_ERR(context.GetNodeName(), "workSpaceSize got from ge is nullptr"),
@@ -152,9 +152,9 @@ ge::graphStatus CompressorTiling::SetBaseInfo()
     baseParams_->reciprocalD = 1.0 / baseParams_->headDim;
     baseParams_->cgSize =
         (baseParams_->seqSize + baseParams_->cmpRatio - 1) / baseParams_->cmpRatio; // number of token after compress
+    baseParams_->stateCacheStrideDim0 = static_cast<uint64_t>(*context_->stateCacheStrideDim0);
     coff = static_cast<uint8_t>(*context_->coff);
     baseParams_->nSize = 2; // 2:每个核处理两个基本块后做全核同步
-    baseParams_->stride = static_cast<uint32_t>(*context_->stride);
 
     OP_LOGI(context_->opName, "[TILING] bSize:%u  tSize:%u cmpRatio:%u coff:%u", baseParams_->batchSize, baseParams_->tokenSize, baseParams_->cmpRatio, coff);
 
@@ -221,7 +221,7 @@ ge::graphStatus CompressorTiling::SetInnerSplitInfo()
         innerSplitParams_->dBaseSize = 128 / coff; // 128：核间切分，D轴基本块大小
     }
     // a5 由于loc更大, mBaseSize x 2
-    // if (socVersion_ == platform_ascendc::SocVersion::ASCEND950) {
+    // if (socVersion_ == platform_ascendc::SocVersion::ASCEND910_95) {
     //      innerSplitParams_->mBaseSize *= 2;
     //  }
     return ge::GRAPH_SUCCESS;
@@ -332,6 +332,7 @@ ge::graphStatus CompressorTiling::GenTilingKey() const
     uint8_t dtype = 0;
     // 0: BSH 1:TH
     uint8_t layout = 0;
+    uint8_t ropeDtype = 0;
     uint8_t rotaryMode = static_cast<uint8_t>(*context_->rotaryMode);
     uint8_t templateId = static_cast<uint8_t>(context_->templateId);
     uint8_t cacheMode = static_cast<uint8_t>(*context_->cacheMode);
@@ -341,6 +342,13 @@ ge::graphStatus CompressorTiling::GenTilingKey() const
         dtype = 0;
     } else if (xDtype == ge::DT_FLOAT16) {
         dtype = 1;
+    }
+    auto ropeSinDtype = context_->ropeSin.desc->GetDataType();
+    auto ropeCosDtype = context_->ropeCos.desc->GetDataType();
+    bool supportFp32Rope = socVersion_ == platform_ascendc::SocVersion::ASCEND910B ||
+                           socVersion_ == platform_ascendc::SocVersion::ASCEND910_93;
+    if (ropeSinDtype == ge::DT_FLOAT && ropeCosDtype == ge::DT_FLOAT && supportFp32Rope) {
+        ropeDtype = 1;
     }
     auto xDimNum = context_->x.shape->GetStorageShape().GetDimNum();
     if (xDimNum == COMPRESSOR_DIM_NUM_3) {
@@ -354,12 +362,13 @@ ge::graphStatus CompressorTiling::GenTilingKey() const
         dtype,
         coff,
         rotaryMode,
-        1,
-        templateId
+        cacheMode,
+        templateId,
+        ropeDtype
     );
     OP_LOGI(context_->opName,
-            "Compressor dtype:%hhu layout:%hhu  coff:%hhu rotary_mode:%hhu, cacheMode: %u, template_id:%hhu", dtype,
-            layout, coff, rotaryMode, cacheMode, templateId);
+            "Compressor dtype:%hhu layout:%hhu  coff:%hhu rotary_mode:%hhu, cacheMode: %u, template_id:%hhu, rope_dtype:%hhu",
+            dtype, layout, coff, rotaryMode, cacheMode, templateId, ropeDtype);
     OP_LOGI(context_->opName, "Compressor tilingKey:%lu", context_->tilingKey);
 
     return ge::GRAPH_SUCCESS;
@@ -443,7 +452,8 @@ void CompressorTiling::LogErrorNumberSupport(const std::vector<T> &expectNumberL
               name.c_str(), subName.c_str(), oss.str().c_str(), to_string(actualValue).c_str());
 }
 
-std::string LayoutTypeToStr(LayoutType layout) {
+std::string LayoutTypeToStr(LayoutType layout)
+{
     switch (layout) {
         case LayoutType::LAYOUT_BSH:
             return "BSH";
@@ -602,7 +612,7 @@ ge::graphStatus CompressorTiling::CheckSingleParaRopeCos() const
 
 ge::graphStatus CompressorTiling::CheckSingleParaStateBlockTable() const
 {
-    if (context_->stateBlockTable.desc == nullptr){
+    if (context_->stateBlockTable.desc == nullptr) {
         return ge::GRAPH_SUCCESS;
     }
     if (ge::GRAPH_SUCCESS != CheckDtypeSupport(context_->stateBlockTable.desc, STATE_BLOCK_TABLE_NAME) ||
@@ -614,7 +624,7 @@ ge::graphStatus CompressorTiling::CheckSingleParaStateBlockTable() const
 
 ge::graphStatus CompressorTiling::CheckSingleParaCuSeqlens() const
 {
-    if (context_->cuSeqlens.desc == nullptr){
+    if (context_->cuSeqlens.desc == nullptr) {
         return ge::GRAPH_SUCCESS;
     }
     if (ge::GRAPH_SUCCESS != CheckDtypeSupport(context_->cuSeqlens.desc, CU_SEQLENS_NAME) ||
@@ -626,7 +636,7 @@ ge::graphStatus CompressorTiling::CheckSingleParaCuSeqlens() const
 
 ge::graphStatus CompressorTiling::CheckSingleParaSeqused() const
 {
-    if (context_->seqUsed.desc == nullptr){
+    if (context_->seqUsed.desc == nullptr) {
         return ge::GRAPH_SUCCESS;
     }
     if (ge::GRAPH_SUCCESS != CheckDtypeSupport(context_->seqUsed.desc, SEQUSED_NAME) ||
@@ -638,7 +648,7 @@ ge::graphStatus CompressorTiling::CheckSingleParaSeqused() const
 
 ge::graphStatus CompressorTiling::CheckSingleParaStartPos() const
 {
-    if (context_->startPos.desc == nullptr){
+    if (context_->startPos.desc == nullptr) {
         return ge::GRAPH_SUCCESS;
     }
     if (ge::GRAPH_SUCCESS != CheckDtypeSupport(context_->startPos.desc, START_POS_NAME) ||
@@ -650,7 +660,7 @@ ge::graphStatus CompressorTiling::CheckSingleParaStartPos() const
 
 ge::graphStatus CompressorTiling::CheckSingleParaCmpKv() const
 {
-    if (context_->cmpKv.desc == nullptr){
+    if (context_->cmpKv.desc == nullptr) {
         return ge::GRAPH_SUCCESS;
     }
     if (ge::GRAPH_SUCCESS != CheckDtypeSupport(context_->cmpKv.desc, CMP_KV_NAME) ||
@@ -699,9 +709,9 @@ ge::graphStatus CompressorTiling::CheckSingleParaRotaryMode()const
 
 ge::graphStatus CompressorTiling::CheckSingleParaCacheMode() const
 {
-    // if (ge::GRAPH_SUCCESS != CheckAttrValueSupport(context_->cacheMode, CACHE_MODE, CACHE_MODE_NAME)) {
-    //     return ge::GRAPH_FAILED;
-    // }
+    if (ge::GRAPH_SUCCESS != CheckAttrValueSupport(context_->cacheMode, CACHE_MODE, CACHE_MODE_NAME)) {
+        return ge::GRAPH_FAILED;
+    }
     return ge::GRAPH_SUCCESS;
 }
 
@@ -887,13 +897,36 @@ ge::graphStatus CompressorTiling::CheckDtypeConsistencyX(const gert::CompileTime
     return ge::GRAPH_SUCCESS;
 }
 
+ge::graphStatus CompressorTiling::CheckDtypeConsistencyRope() const
+{
+    auto sinDtype = context_->ropeSin.desc->GetDataType();
+    auto cosDtype = context_->ropeCos.desc->GetDataType();
+    OP_CHECK_IF(
+        sinDtype != cosDtype,
+        OP_LOGE(context_->opName, "%s datatype should be same with %s: %s, but got %s", ROPE_COS_NAME.c_str(),
+                ROPE_SIN_NAME.c_str(), DataTypeToSerialString(sinDtype).c_str(),
+                DataTypeToSerialString(cosDtype).c_str()),
+        return ge::GRAPH_FAILED);
+    OP_CHECK_IF(
+        sinDtype != context_->dtype && sinDtype != ge::DT_FLOAT,
+        OP_LOGE(context_->opName, "rope datatype should be same with x or DT_FLOAT, x is %s, but got %s",
+                DataTypeToSerialString(context_->dtype).c_str(), DataTypeToSerialString(sinDtype).c_str()),
+        return ge::GRAPH_FAILED);
+    bool supportFp32Rope = socVersion_ == platform_ascendc::SocVersion::ASCEND910B ||
+                           socVersion_ == platform_ascendc::SocVersion::ASCEND910_93;
+    OP_CHECK_IF(
+        sinDtype == ge::DT_FLOAT && !supportFp32Rope,
+        OP_LOGE(context_->opName, "float32 rope is only enabled on ascend910b and ascend910_93."),
+        return ge::GRAPH_FAILED);
+    return ge::GRAPH_SUCCESS;
+}
+
 ge::graphStatus CompressorTiling::CheckDtypeConsistency() const
 {
     if (CheckDtypeConsistencyX(context_->wkv.desc, WKV_NAME) != ge::GRAPH_SUCCESS ||
         CheckDtypeConsistencyX(context_->wgate.desc, WGATE_NAME) != ge::GRAPH_SUCCESS ||
         CheckDtypeConsistencyX(context_->normWeight.desc, NORM_WEIGHT_NAME) != ge::GRAPH_SUCCESS ||
-        CheckDtypeConsistencyX(context_->ropeSin.desc, ROPE_SIN_NAME) != ge::GRAPH_SUCCESS ||
-        CheckDtypeConsistencyX(context_->ropeCos.desc, ROPE_COS_NAME) != ge::GRAPH_SUCCESS ||
+        CheckDtypeConsistencyRope() != ge::GRAPH_SUCCESS ||
         CheckDtypeConsistencyX(context_->cmpKv.desc, CMP_KV_NAME) != ge::GRAPH_SUCCESS) {
         return ge::GRAPH_FAILED;
     }
