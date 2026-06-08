@@ -155,17 +155,12 @@ def rejection_random_sample_kernel(
     vocab_size,  # vocab_size or selected_vocab_size if ENABLE_REDUCE_SAMPLING
     global_vocab_size,  # global vocab size for draft_probs indexing (only used if ENABLE_REDUCE_SAMPLING)
     vec_len,
-    ori_target_probs_ptr,  # [num_tokens, ori_vocab_size] original probs for entropy
-    NO_ORI_TARGET_PROBS: tl.constexpr,
+    entropy_thresholds_ptr,  # [num_tokens] precomputed entropy thresholds (or None)
+    NO_ENTROPY_THRESHOLDS: tl.constexpr,
     NO_DRAFT_PROBS: tl.constexpr,
     ENABLE_REDUCE_SAMPLING: tl.constexpr,  # Whether using reduce sampling
-    ENTROPY_VERIFY: tl.constexpr,
     BLOCK_SIZE: tl.constexpr,
     VOCAB_BLOCK_SIZE: tl.constexpr = 512,
-    POSTERIOR_THRESHOLD: tl.constexpr = 0.95,
-    POSTERIOR_ALPHA: tl.constexpr = 0.4,
-    SUB_BLOCK: tl.constexpr = 4096,
-    EPSILON: tl.constexpr = 1e-10,
 ):
     block_idx = tl.program_id(0)
     offsets = block_idx * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
@@ -235,42 +230,19 @@ def rejection_random_sample_kernel(
 
                         tl.store(output_token_ids_ptr + req_idx * (max_spec_len + 1) + pos, token_id)
                     else:
-                        draft_token_id = tl.load(draft_token_ids_ptr + start_idx + pos)
-                        target_prob = tl.load(target_probs_ptr + (start_idx + pos) * global_vocab_size + draft_token_id)
+                        token_idx = start_idx + pos
+                        draft_token_id = tl.load(draft_token_ids_ptr + token_idx)
+                        target_prob = tl.load(target_probs_ptr + token_idx * vocab_size + draft_token_id)
                         if NO_DRAFT_PROBS:
                             draft_prob = 1
                         else:
                             draft_prob = tl.load(
-                                draft_probs_ptr + (start_idx + pos) * global_vocab_size + draft_token_id
+                                draft_probs_ptr + token_idx * vocab_size + draft_token_id
                             )
-                        uniform_prob = tl.load(uniform_probs_ptr + start_idx + pos)
+                        uniform_prob = tl.load(uniform_probs_ptr + token_idx)
 
-                        if ENTROPY_VERIFY:
-                            loop = (vocab_size + SUB_BLOCK - 1) // SUB_BLOCK
-                            entropy = 0.0
-                            for loop_i in range(loop):
-                                vocab_start = loop_i * SUB_BLOCK
-                                vocab_offset = vocab_start + tl.arange(0, SUB_BLOCK)
-                                vocab_mask = vocab_offset < vocab_size
-                                if NO_ORI_TARGET_PROBS:
-                                    probs = tl.load(
-                                        target_probs_ptr + (start_idx + pos) * vocab_size + vocab_offset,
-                                        vocab_mask,
-                                        other=0,
-                                    )
-                                else:
-                                    probs = tl.load(
-                                        ori_target_probs_ptr + (start_idx + pos) * vocab_size + vocab_offset,
-                                        vocab_mask,
-                                        other=0,
-                                    )
-                                log_probs = tl.log(probs + EPSILON)
-                                entropy_contrib = -probs * log_probs
-                                entropy += tl.sum(entropy_contrib)
-
-                            exp_neg_entropy = tl.exp(-entropy * POSTERIOR_ALPHA)
-                            threshold_by_entropy = exp_neg_entropy
-                            threshold = tl.minimum(threshold_by_entropy, POSTERIOR_THRESHOLD)
+                        if not NO_ENTROPY_THRESHOLDS:
+                            threshold = tl.load(entropy_thresholds_ptr + token_idx)
                             _uniform_prob = threshold * uniform_prob
                         else:
                             _uniform_prob = uniform_prob
@@ -282,7 +254,7 @@ def rejection_random_sample_kernel(
                         else:
                             # Reject. Use recovered token.
                             rejected = True
-                            token_id = tl.load(recovered_token_ids_ptr + start_idx + pos)
+                            token_id = tl.load(recovered_token_ids_ptr + token_idx)
                         tl.store(output_token_ids_ptr + req_idx * (max_spec_len + 1) + pos, token_id)
 
             if not rejected:
@@ -529,17 +501,12 @@ def rejection_random_sample_block_verify_kernel(
     vocab_size,  # vocab_size or selected_vocab_size if ENABLE_REDUCE_SAMPLING
     global_vocab_size,  # global vocab size for draft_probs indexing (only used if ENABLE_REDUCE_SAMPLING)
     vec_len,
-    ori_target_probs_ptr,  # [num_tokens, ori_vocab_size] original probs for entropy
-    NO_ORI_TARGET_PROBS: tl.constexpr,
+    entropy_thresholds_ptr,  # [num_tokens] precomputed entropy thresholds (or None)
+    NO_ENTROPY_THRESHOLDS: tl.constexpr,
     NO_DRAFT_PROBS: tl.constexpr,
     ENABLE_REDUCE_SAMPLING: tl.constexpr,  # Whether using reduce_sampling
     BLOCK_SIZE: tl.constexpr,
-    ENTROPY_VERIFY: tl.constexpr,
     VOCAB_BLOCK_SIZE: tl.constexpr = 512,
-    POSTERIOR_THRESHOLD: tl.constexpr = 0.95,
-    POSTERIOR_ALPHA: tl.constexpr = 0.4,
-    SUB_BLOCK: tl.constexpr = 4096,
-    EPSILON: tl.constexpr = 1e-10,
 ):
     block_idx = tl.program_id(0)
     offsets = block_idx * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
@@ -557,7 +524,7 @@ def rejection_random_sample_block_verify_kernel(
             not_greedy = get_element(not_greedy_mask, (req_i,))
             if not_greedy:
                 pi = 1.0
-                uniform_prob = 1.0
+                cum_uniform_prob = 1.0
                 last_accepted_token_pos = -1
                 start_idx = get_element(start_idxs, (req_i,))
                 req_idx = block_idx * BLOCK_SIZE + req_i
@@ -592,7 +559,7 @@ def rejection_random_sample_block_verify_kernel(
                                 found = True
 
                     tmp_uniform_prob = tl.load(uniform_probs_ptr + token_idx)
-                    uniform_prob = uniform_prob * tmp_uniform_prob
+                    cum_uniform_prob = cum_uniform_prob * tmp_uniform_prob
 
                     if NO_DRAFT_PROBS:
                         draft_prob = 1.0
@@ -600,7 +567,7 @@ def rejection_random_sample_block_verify_kernel(
                         draft_prob = tl.load(draft_probs_ptr + token_idx * global_vocab_size + draft_token_id)
 
                     pi = min(pi * target_prob / draft_prob, 1.0)
-                    if draft_prob > 0 and pi >= uniform_prob:
+                    if draft_prob > 0 and pi >= cum_uniform_prob:
                         last_accepted_token_pos = pos
 
                 # Store accepted tokens
@@ -626,7 +593,7 @@ def rejection_random_sample_block_verify_kernel(
             not_greedy = get_element(not_greedy_mask, (req_i,))
             if not_greedy:
                 pi = 1.0
-                uniform_prob = 1.0
+                cum_uniform_prob = 1.0
                 last_accepted_token_pos = -1
                 start_idx = get_element(start_idxs, (req_i,))
                 req_idx = block_idx * BLOCK_SIZE + req_i
@@ -639,42 +606,21 @@ def rejection_random_sample_block_verify_kernel(
                     target_prob = tl.load(target_probs_ptr + token_idx * vocab_size + draft_token_id)
 
                     tmp_uniform_prob = tl.load(uniform_probs_ptr + token_idx)
-                    uniform_prob = uniform_prob * tmp_uniform_prob
+                    cum_uniform_prob = cum_uniform_prob * tmp_uniform_prob
 
                     if NO_DRAFT_PROBS:
                         draft_prob = 1.0
                     else:
-                        vocab_for_draft = global_vocab_size if ENABLE_REDUCE_SAMPLING else vocab_size
-                        draft_prob = tl.load(draft_probs_ptr + token_idx * vocab_for_draft + draft_token_id)
+                        draft_prob = tl.load(draft_probs_ptr + token_idx * vocab_size + draft_token_id)
 
-                    if ENTROPY_VERIFY:
-                        loop = (vocab_size + SUB_BLOCK - 1) // SUB_BLOCK
-                        entropy = 0.0
-                        for loop_i in range(loop):
-                            vocab_start = loop_i * SUB_BLOCK
-                            vocab_offset = vocab_start + tl.arange(0, SUB_BLOCK)
-                            vocab_mask = vocab_offset < vocab_size
-                            if NO_ORI_TARGET_PROBS:
-                                probs = tl.load(
-                                    target_probs_ptr + token_idx * vocab_size + vocab_offset, vocab_mask, other=0
-                                )
-                            else:
-                                probs = tl.load(
-                                    ori_target_probs_ptr + token_idx * vocab_size + vocab_offset, vocab_mask, other=0
-                                )
-                            log_probs = tl.log(probs + EPSILON)
-                            entropy_contrib = -probs * log_probs
-                            entropy += tl.sum(entropy_contrib)
-
-                        exp_neg_entropy = tl.exp(-entropy * POSTERIOR_ALPHA)
-                        threshold_by_entropy = exp_neg_entropy
-                        threshold = tl.minimum(threshold_by_entropy, POSTERIOR_THRESHOLD)
-                        _uniform_prob = threshold * uniform_prob
+                    if not NO_ENTROPY_THRESHOLDS:
+                        threshold = tl.load(entropy_thresholds_ptr + token_idx)
+                        _cum_uniform_prob = threshold * cum_uniform_prob
                     else:
-                        _uniform_prob = uniform_prob
+                        _cum_uniform_prob = cum_uniform_prob
 
                     pi = min(pi * target_prob / draft_prob, 1.0)
-                    if draft_prob > 0 and pi >= _uniform_prob:
+                    if draft_prob > 0 and pi >= _cum_uniform_prob:
                         last_accepted_token_pos = pos
 
                 # Store accepted tokens
