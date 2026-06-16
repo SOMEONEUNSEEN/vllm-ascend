@@ -66,7 +66,7 @@ def register_ascend_mla_spec_in_manager():
     from vllm.v1.core.single_type_kv_cache_manager import FullAttentionManager
     from vllm.v1.kv_cache_interface import MLAAttentionSpec as AscendMLAAttentionSpec
 
-    if vllm_version_is("0.22.1"):
+    if vllm_version_is("0.23.0"):
         import sys as _sys
 
         _stm = _sys.modules.get("vllm.v1.core.single_type_kv_cache_manager")

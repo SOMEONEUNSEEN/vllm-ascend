@@ -61,7 +61,7 @@ def _make_compress_manager(
         enable_caching=True,
         hash_block_size=block_size,
     )
-    if vllm_version_is("0.22.1"):
+    if vllm_version_is("0.23.0"):
         manager = CompressAttentionManager(
             spec,
             block_pool=block_pool,
