@@ -645,8 +645,8 @@ class TestReduceSampling(TestBase):
         draft_token_ids = torch.tensor([5, 1])
         draft_probs = torch.tensor(
             [
-                [0.6, 0.4, 0.0],
-                [0.2, 0.8, 0.0],
+                [0.0, 0.0, 0.0, 0.0, 0.0, 0.6],
+                [0.0, 0.8, 0.0, 0.0, 0.0, 0.0],
             ]
         )
         target_probs = torch.tensor(
@@ -696,7 +696,8 @@ class TestReduceSampling(TestBase):
         """Reduce sampling + entropy verify + random sample.
 
         Entropy is computed over the full vocabulary (ori_target_probs),
-        not the reduced candidates.
+        not the reduced candidates. High entropy lowers the threshold,
+        making acceptance easier.
         """
         batch_size = 1
         max_spec_len = 2
@@ -758,7 +759,8 @@ class TestReduceSampling(TestBase):
         )
 
         assert output_token_ids[0, 0].item() == 1
-        assert output_token_ids[0, 2].item() == 100
+        assert output_token_ids[0, 1].item() == 88
+        assert output_token_ids[0, 2].item() == PLACEHOLDER_TOKEN_ID
 
     @patch("torch.arange", new=mock_pin_memory(torch.arange))
     @patch("torch.ones", new=mock_pin_memory(torch.ones))
@@ -863,7 +865,7 @@ class TestReduceSampling(TestBase):
         )
         bonus_token_ids = torch.tensor([[100]])
         recovered_token_ids = torch.tensor([99, 88])
-        uniform_probs = torch.tensor([0.7, 0.6])
+        uniform_probs = torch.tensor([0.5, 0.5])
         is_greedy = torch.tensor([False])
         vocab_size = 3
 
@@ -893,6 +895,7 @@ class TestReduceSampling(TestBase):
 
         assert output_token_ids[0, 0].item() == 0
         assert output_token_ids[0, 1].item() == 88
+        assert output_token_ids[0, 2].item() == PLACEHOLDER_TOKEN_ID
 
     @patch("torch.arange", new=mock_pin_memory(torch.arange))
     @patch("torch.ones", new=mock_pin_memory(torch.ones))
@@ -915,7 +918,7 @@ class TestReduceSampling(TestBase):
         )
         bonus_token_ids = torch.tensor([[100]])
         recovered_token_ids = torch.tensor([99, 88])
-        uniform_probs = torch.tensor([0.7, 0.6])
+        uniform_probs = torch.tensor([0.5, 0.5])
         is_greedy = torch.tensor([False])
         vocab_size = 4
 
@@ -945,6 +948,8 @@ class TestReduceSampling(TestBase):
 
         assert output_token_ids[0, 0].item() == 0
         assert output_token_ids[0, 1].item() == 88
+        assert output_token_ids[0, 2].item() == PLACEHOLDER_TOKEN_ID
+        assert output_token_ids[0, 3].item() == PLACEHOLDER_TOKEN_ID
 
     @patch("torch.arange", new=mock_pin_memory(torch.arange))
     @patch("torch.ones", new=mock_pin_memory(torch.ones))
