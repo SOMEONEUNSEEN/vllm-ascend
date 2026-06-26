@@ -561,6 +561,526 @@ class TestAscendRejectionSampler(TestBase):
         assert output_token_ids[1, 1].item() == 200
 
 
+class TestReduceSampling(TestBase):
+    """Test REDUCE_SAMPLING feature integration in rejection sampling.
+
+    Reduce sampling shrinks the vocabulary to top-k/top-p candidates before
+    sampling. These tests verify that reduce sampling works correctly when
+    combined with other features: random sample, block verify, ngram,
+    and entropy verify.
+    """
+
+    @patch("torch.arange", new=mock_pin_memory(torch.arange))
+    @patch("torch.ones", new=mock_pin_memory(torch.ones))
+    @patch("torch.full", new=mock_pin_memory(torch.full))
+    @patch("torch.tensor", new=mock_pin_memory(torch.tensor))
+    def test_reduce_sampling_random_sample_basic(self):
+        """Reduce sampling + random sample (non-block-verify) basic acceptance."""
+        batch_size = 2
+        max_spec_len = 3
+        output_token_ids = torch.full((batch_size, max_spec_len + 1), PLACEHOLDER_TOKEN_ID)
+
+        cu_num_draft_tokens = torch.tensor([2, 1])
+        draft_token_ids = torch.tensor([1, 0, 2])
+        draft_probs = torch.tensor(
+            [
+                [0.0, 0.6, 0.0, 0.4],
+                [0.1, 0.2, 0.3, 0.4],
+                [0.5, 0.5, 0.0, 0.0],
+            ]
+        )
+        target_probs = torch.tensor(
+            [
+                [0.0, 0.8, 0.0, 0.2],
+                [0.2, 0.1, 0.3, 0.4],
+                [0.9, 0.1, 0.0, 0.0],
+            ]
+        )
+        bonus_token_ids = torch.tensor([[100], [200]])
+        recovered_token_ids = torch.tensor([99, 88, 77])
+        uniform_probs = torch.tensor([0.7, 0.6, 0.5])
+        is_greedy = torch.tensor([False, False])
+        vocab_size = 4
+
+        target_indices = torch.tensor(
+            [
+                [0, 1, 2, 3],
+                [0, 1, 2, 3],
+                [0, 1, 2, 3],
+            ]
+        )
+
+        rejection_random_sample_pytorch(
+            output_token_ids,
+            cu_num_draft_tokens,
+            draft_token_ids,
+            draft_probs,
+            target_probs,
+            bonus_token_ids,
+            recovered_token_ids,
+            uniform_probs,
+            is_greedy,
+            max_spec_len,
+            vocab_size,
+            IS_NGRAM=False,
+            target_indices=target_indices,
+            enable_reduce_sampling=True,
+        )
+
+        assert output_token_ids[0, 0].item() == 1
+        assert output_token_ids[0, 1].item() == 0
+        assert output_token_ids[0, 2].item() == 100
+
+    @patch("torch.arange", new=mock_pin_memory(torch.arange))
+    @patch("torch.ones", new=mock_pin_memory(torch.ones))
+    @patch("torch.full", new=mock_pin_memory(torch.full))
+    @patch("torch.tensor", new=mock_pin_memory(torch.tensor))
+    def test_reduce_sampling_random_sample_draft_not_in_candidates(self):
+        """Reduce sampling: when draft token is not in reduced candidates, target_prob=0 → rejected."""
+        batch_size = 1
+        max_spec_len = 2
+        output_token_ids = torch.full((batch_size, max_spec_len + 1), PLACEHOLDER_TOKEN_ID)
+
+        cu_num_draft_tokens = torch.tensor([2])
+        draft_token_ids = torch.tensor([5, 1])
+        draft_probs = torch.tensor(
+            [
+                [0.6, 0.4, 0.0],
+                [0.2, 0.8, 0.0],
+            ]
+        )
+        target_probs = torch.tensor(
+            [
+                [0.8, 0.2, 0.0],
+                [0.1, 0.9, 0.0],
+            ]
+        )
+        bonus_token_ids = torch.tensor([[100]])
+        recovered_token_ids = torch.tensor([99, 88])
+        uniform_probs = torch.tensor([0.5, 0.5])
+        is_greedy = torch.tensor([False])
+        vocab_size = 3
+
+        target_indices = torch.tensor(
+            [
+                [0, 1, 2],
+                [0, 1, 2],
+            ]
+        )
+
+        rejection_random_sample_pytorch(
+            output_token_ids,
+            cu_num_draft_tokens,
+            draft_token_ids,
+            draft_probs,
+            target_probs,
+            bonus_token_ids,
+            recovered_token_ids,
+            uniform_probs,
+            is_greedy,
+            max_spec_len,
+            vocab_size,
+            IS_NGRAM=False,
+            target_indices=target_indices,
+            enable_reduce_sampling=True,
+        )
+
+        assert output_token_ids[0, 0].item() == 99
+        assert output_token_ids[0, 1].item() == PLACEHOLDER_TOKEN_ID
+
+    @patch("torch.arange", new=mock_pin_memory(torch.arange))
+    @patch("torch.ones", new=mock_pin_memory(torch.ones))
+    @patch("torch.full", new=mock_pin_memory(torch.full))
+    @patch("torch.tensor", new=mock_pin_memory(torch.tensor))
+    def test_reduce_sampling_random_sample_entropy_verify(self):
+        """Reduce sampling + entropy verify + random sample.
+
+        Entropy is computed over the full vocabulary (ori_target_probs),
+        not the reduced candidates.
+        """
+        batch_size = 1
+        max_spec_len = 2
+        output_token_ids = torch.full((batch_size, max_spec_len + 1), PLACEHOLDER_TOKEN_ID)
+
+        cu_num_draft_tokens = torch.tensor([2])
+        draft_token_ids = torch.tensor([1, 0])
+        draft_probs = torch.tensor(
+            [
+                [0.6, 0.4, 0.0],
+                [0.8, 0.2, 0.0],
+            ]
+        )
+        target_probs = torch.tensor(
+            [
+                [0.8, 0.2, 0.0],
+                [0.1, 0.9, 0.0],
+            ]
+        )
+        bonus_token_ids = torch.tensor([[100]])
+        recovered_token_ids = torch.tensor([99, 88])
+        uniform_probs = torch.tensor([0.7, 0.6])
+        is_greedy = torch.tensor([False])
+        vocab_size = 3
+
+        target_indices = torch.tensor(
+            [
+                [0, 1, 2],
+                [0, 1, 2],
+            ]
+        )
+        ori_target_probs = torch.tensor(
+            [
+                [0.34, 0.33, 0.33],
+                [0.33, 0.34, 0.33],
+            ]
+        )
+
+        rejection_random_sample_pytorch(
+            output_token_ids,
+            cu_num_draft_tokens,
+            draft_token_ids,
+            draft_probs,
+            target_probs,
+            bonus_token_ids,
+            recovered_token_ids,
+            uniform_probs,
+            is_greedy,
+            max_spec_len,
+            vocab_size,
+            IS_NGRAM=False,
+            target_indices=target_indices,
+            enable_reduce_sampling=True,
+            ENTROPY_VERIFY=True,
+            POSTERIOR_THRESHOLD=0.95,
+            POSTERIOR_ALPHA=0.4,
+            EPSILON=1e-10,
+            ori_target_probs=ori_target_probs,
+        )
+
+        assert output_token_ids[0, 0].item() == 1
+        assert output_token_ids[0, 2].item() == 100
+
+    @patch("torch.arange", new=mock_pin_memory(torch.arange))
+    @patch("torch.ones", new=mock_pin_memory(torch.ones))
+    @patch("torch.full", new=mock_pin_memory(torch.full))
+    @patch("torch.tensor", new=mock_pin_memory(torch.tensor))
+    def test_reduce_sampling_block_verify_entropy_verify(self):
+        """Reduce sampling + block verify + entropy verify combined.
+
+        Block verify uses cumulative product of acceptance ratios, and
+        entropy verify modifies the threshold. Both work with reduced
+        candidate vocabulary.
+        """
+        batch_size = 2
+        max_spec_len = 3
+        output_token_ids = torch.full((batch_size, max_spec_len + 1), PLACEHOLDER_TOKEN_ID)
+
+        cu_num_draft_tokens = torch.tensor([2, 1])
+        draft_token_ids = torch.tensor([1, 0, 2])
+        draft_probs = torch.tensor(
+            [
+                [0.6, 0.4, 0.0, 0.0],
+                [0.2, 0.8, 0.0, 0.0],
+                [0.5, 0.5, 0.0, 0.0],
+            ]
+        )
+        target_probs = torch.tensor(
+            [
+                [0.8, 0.2, 0.0, 0.0],
+                [0.1, 0.9, 0.0, 0.0],
+                [0.9, 0.1, 0.0, 0.0],
+            ]
+        )
+        bonus_token_ids = torch.tensor([[100], [200]])
+        recovered_token_ids = torch.tensor([99, 88, 77])
+        uniform_probs = torch.tensor([0.7, 0.6, 0.5])
+        is_greedy = torch.tensor([False, False])
+        vocab_size = 4
+
+        target_indices = torch.tensor(
+            [
+                [0, 1, 2, 3],
+                [0, 1, 2, 3],
+                [0, 1, 2, 3],
+            ]
+        )
+        ori_target_probs = torch.tensor(
+            [
+                [0.25, 0.25, 0.25, 0.25],
+                [0.25, 0.25, 0.25, 0.25],
+                [0.25, 0.25, 0.25, 0.25],
+            ]
+        )
+
+        rejection_random_sample_block_verify_pytorch(
+            output_token_ids,
+            cu_num_draft_tokens,
+            draft_token_ids,
+            draft_probs,
+            target_probs,
+            bonus_token_ids,
+            recovered_token_ids,
+            uniform_probs,
+            is_greedy,
+            max_spec_len,
+            vocab_size,
+            IS_NGRAM=False,
+            target_indices=target_indices,
+            enable_reduce_sampling=True,
+            ENTROPY_VERIFY=True,
+            POSTERIOR_THRESHOLD=0.95,
+            POSTERIOR_ALPHA=0.4,
+            EPSILON=1e-10,
+            ori_target_probs=ori_target_probs,
+        )
+
+        assert output_token_ids[0, 0].item() == 1
+        assert output_token_ids[0, 1].item() == 0
+        assert output_token_ids[0, 2].item() == 100
+
+    @patch("torch.arange", new=mock_pin_memory(torch.arange))
+    @patch("torch.ones", new=mock_pin_memory(torch.ones))
+    @patch("torch.full", new=mock_pin_memory(torch.full))
+    @patch("torch.tensor", new=mock_pin_memory(torch.tensor))
+    def test_reduce_sampling_random_sample_ngram(self):
+        """Reduce sampling + ngram + random sample.
+
+        In ngram mode, draft_probs=None and draft_token_probs=1.0.
+        Target probs come from the reduced candidate set.
+        """
+        batch_size = 1
+        max_spec_len = 2
+        output_token_ids = torch.full((batch_size, max_spec_len + 1), PLACEHOLDER_TOKEN_ID)
+
+        cu_num_draft_tokens = torch.tensor([2])
+        draft_token_ids = torch.tensor([0, 1])
+        draft_probs = None
+        target_probs = torch.tensor(
+            [
+                [0.6, 0.2, 0.2],
+                [0.1, 0.1, 0.8],
+            ]
+        )
+        bonus_token_ids = torch.tensor([[100]])
+        recovered_token_ids = torch.tensor([99, 88])
+        uniform_probs = torch.tensor([0.7, 0.6])
+        is_greedy = torch.tensor([False])
+        vocab_size = 3
+
+        target_indices = torch.tensor(
+            [
+                [0, 1, 2],
+                [0, 1, 2],
+            ]
+        )
+
+        rejection_random_sample_pytorch(
+            output_token_ids,
+            cu_num_draft_tokens,
+            draft_token_ids,
+            draft_probs,
+            target_probs,
+            bonus_token_ids,
+            recovered_token_ids,
+            uniform_probs,
+            is_greedy,
+            max_spec_len,
+            vocab_size,
+            IS_NGRAM=True,
+            target_indices=target_indices,
+            enable_reduce_sampling=True,
+        )
+
+        assert output_token_ids[0, 0].item() == 0
+        assert output_token_ids[0, 1].item() == 88
+
+    @patch("torch.arange", new=mock_pin_memory(torch.arange))
+    @patch("torch.ones", new=mock_pin_memory(torch.ones))
+    @patch("torch.full", new=mock_pin_memory(torch.full))
+    @patch("torch.tensor", new=mock_pin_memory(torch.tensor))
+    def test_reduce_sampling_block_verify_ngram(self):
+        """Reduce sampling + block verify + ngram combined."""
+        batch_size = 1
+        max_spec_len = 3
+        output_token_ids = torch.full((batch_size, max_spec_len + 1), PLACEHOLDER_TOKEN_ID)
+
+        cu_num_draft_tokens = torch.tensor([2])
+        draft_token_ids = torch.tensor([0, 1])
+        draft_probs = None
+        target_probs = torch.tensor(
+            [
+                [0.6, 0.2, 0.2, 0.0],
+                [0.1, 0.1, 0.8, 0.0],
+            ]
+        )
+        bonus_token_ids = torch.tensor([[100]])
+        recovered_token_ids = torch.tensor([99, 88])
+        uniform_probs = torch.tensor([0.7, 0.6])
+        is_greedy = torch.tensor([False])
+        vocab_size = 4
+
+        target_indices = torch.tensor(
+            [
+                [0, 1, 2, 3],
+                [0, 1, 2, 3],
+            ]
+        )
+
+        rejection_random_sample_block_verify_pytorch(
+            output_token_ids,
+            cu_num_draft_tokens,
+            draft_token_ids,
+            draft_probs,
+            target_probs,
+            bonus_token_ids,
+            recovered_token_ids,
+            uniform_probs,
+            is_greedy,
+            max_spec_len,
+            vocab_size,
+            IS_NGRAM=True,
+            target_indices=target_indices,
+            enable_reduce_sampling=True,
+        )
+
+        assert output_token_ids[0, 0].item() == 0
+        assert output_token_ids[0, 1].item() == 88
+
+    @patch("torch.arange", new=mock_pin_memory(torch.arange))
+    @patch("torch.ones", new=mock_pin_memory(torch.ones))
+    @patch("torch.full", new=mock_pin_memory(torch.full))
+    @patch("torch.tensor", new=mock_pin_memory(torch.tensor))
+    def test_reduce_sampling_ngram_entropy_verify_random_sample(self):
+        """Reduce sampling + ngram + entropy verify + random sample (full stack).
+
+        Tests the complete feature stack: ngram mode, reduce sampling,
+        and entropy-based threshold adjustment all working together.
+        """
+        batch_size = 1
+        max_spec_len = 2
+        output_token_ids = torch.full((batch_size, max_spec_len + 1), PLACEHOLDER_TOKEN_ID)
+
+        cu_num_draft_tokens = torch.tensor([2])
+        draft_token_ids = torch.tensor([0, 1])
+        draft_probs = None
+        target_probs = torch.tensor(
+            [
+                [0.6, 0.2, 0.2],
+                [0.1, 0.1, 0.8],
+            ]
+        )
+        bonus_token_ids = torch.tensor([[100]])
+        recovered_token_ids = torch.tensor([99, 88])
+        uniform_probs = torch.tensor([0.7, 0.6])
+        is_greedy = torch.tensor([False])
+        vocab_size = 3
+
+        target_indices = torch.tensor(
+            [
+                [0, 1, 2],
+                [0, 1, 2],
+            ]
+        )
+        ori_target_probs = torch.tensor(
+            [
+                [0.6, 0.2, 0.2],
+                [0.1, 0.1, 0.8],
+            ]
+        )
+
+        rejection_random_sample_pytorch(
+            output_token_ids,
+            cu_num_draft_tokens,
+            draft_token_ids,
+            draft_probs,
+            target_probs,
+            bonus_token_ids,
+            recovered_token_ids,
+            uniform_probs,
+            is_greedy,
+            max_spec_len,
+            vocab_size,
+            IS_NGRAM=True,
+            target_indices=target_indices,
+            enable_reduce_sampling=True,
+            ENTROPY_VERIFY=True,
+            POSTERIOR_THRESHOLD=0.95,
+            POSTERIOR_ALPHA=0.4,
+            EPSILON=1e-10,
+            ori_target_probs=ori_target_probs,
+        )
+
+        assert output_token_ids[0, 0].item() == 0
+        assert output_token_ids[0, 1].item() == 88
+
+    @patch("torch.arange", new=mock_pin_memory(torch.arange))
+    @patch("torch.ones", new=mock_pin_memory(torch.ones))
+    @patch("torch.full", new=mock_pin_memory(torch.full))
+    @patch("torch.tensor", new=mock_pin_memory(torch.tensor))
+    def test_reduce_sampling_ngram_entropy_verify_block_verify(self):
+        """Reduce sampling + ngram + entropy verify + block verify (full stack).
+
+        Tests the complete feature stack: ngram mode, reduce sampling,
+        entropy-based threshold adjustment, and block verify all combined.
+        """
+        batch_size = 1
+        max_spec_len = 3
+        output_token_ids = torch.full((batch_size, max_spec_len + 1), PLACEHOLDER_TOKEN_ID)
+
+        cu_num_draft_tokens = torch.tensor([2])
+        draft_token_ids = torch.tensor([0, 1])
+        draft_probs = None
+        target_probs = torch.tensor(
+            [
+                [0.6, 0.2, 0.2, 0.0],
+                [0.1, 0.1, 0.8, 0.0],
+            ]
+        )
+        bonus_token_ids = torch.tensor([[100]])
+        recovered_token_ids = torch.tensor([99, 88])
+        uniform_probs = torch.tensor([0.7, 0.6])
+        is_greedy = torch.tensor([False])
+        vocab_size = 4
+
+        target_indices = torch.tensor(
+            [
+                [0, 1, 2, 3],
+                [0, 1, 2, 3],
+            ]
+        )
+        ori_target_probs = torch.tensor(
+            [
+                [0.6, 0.2, 0.2, 0.0],
+                [0.1, 0.1, 0.8, 0.0],
+            ]
+        )
+
+        rejection_random_sample_block_verify_pytorch(
+            output_token_ids,
+            cu_num_draft_tokens,
+            draft_token_ids,
+            draft_probs,
+            target_probs,
+            bonus_token_ids,
+            recovered_token_ids,
+            uniform_probs,
+            is_greedy,
+            max_spec_len,
+            vocab_size,
+            IS_NGRAM=True,
+            target_indices=target_indices,
+            enable_reduce_sampling=True,
+            ENTROPY_VERIFY=True,
+            POSTERIOR_THRESHOLD=0.95,
+            POSTERIOR_ALPHA=0.4,
+            EPSILON=1e-10,
+            ori_target_probs=ori_target_probs,
+        )
+
+        assert output_token_ids[0, 0].item() == 0
+        assert output_token_ids[0, 1].item() == 88
+
+
 class TestEntropyVerify(TestBase):
     """Test ENTROPY_VERIFY mode in rejection sampling.
 
