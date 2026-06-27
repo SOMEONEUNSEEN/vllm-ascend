@@ -176,7 +176,7 @@ def rejection_random_sample_kernel(
     end_idxs = tl.load(cu_num_draft_tokens_ptr + offsets, not_greedy_mask)
     n_num_draft_tokens = end_idxs - start_idxs
 
-    for req_i in range(BLOCK_SIZE):
+    for req_i in tl.range(0, BLOCK_SIZE):
         not_greedy = get_element(not_greedy_mask, (req_i,))
         if not_greedy:
             rejected = False
@@ -217,9 +217,14 @@ def rejection_random_sample_kernel(
                                         target_prob = current_match_prob
                                         found = True
                             draft_prob_stride = global_vocab_size
-                            entropy_vocab_size = global_vocab_size
-                            entropy_probs_ptr = ori_target_probs_ptr if not NO_ORI_TARGET_PROBS else None
-                            entropy_probs_stride = global_vocab_size
+                            if NO_ORI_TARGET_PROBS:
+                                entropy_vocab_size = vocab_size
+                                entropy_probs_ptr = target_probs_ptr
+                                entropy_probs_stride = vocab_size
+                            else:
+                                entropy_vocab_size = global_vocab_size
+                                entropy_probs_ptr = ori_target_probs_ptr
+                                entropy_probs_stride = global_vocab_size
                         else:
                             target_prob = tl.load(target_probs_ptr + token_idx * global_vocab_size + draft_token_id)
                             draft_prob_stride = global_vocab_size
@@ -521,7 +526,7 @@ def rejection_random_sample_block_verify_kernel(
     end_idxs = tl.load(cu_num_draft_tokens_ptr + offsets, not_greedy_mask)
     n_num_draft_tokens = end_idxs - start_idxs
 
-    for req_i in range(BLOCK_SIZE):
+    for req_i in tl.range(0, BLOCK_SIZE):
         not_greedy = get_element(not_greedy_mask, (req_i,))
         if not_greedy:
             pi = 1.0
@@ -562,9 +567,14 @@ def rejection_random_sample_block_verify_kernel(
                                     target_prob = current_match_prob
                                     found = True
                         draft_prob_stride = global_vocab_size
-                        entropy_vocab_size = global_vocab_size
-                        entropy_probs_ptr = ori_target_probs_ptr if not NO_ORI_TARGET_PROBS else None
-                        entropy_probs_stride = global_vocab_size
+                        if NO_ORI_TARGET_PROBS:
+                            entropy_vocab_size = vocab_size
+                            entropy_probs_ptr = target_probs_ptr
+                            entropy_probs_stride = vocab_size
+                        else:
+                            entropy_vocab_size = global_vocab_size
+                            entropy_probs_ptr = ori_target_probs_ptr
+                            entropy_probs_stride = global_vocab_size
                     else:
                         target_prob = tl.load(target_probs_ptr + token_idx * vocab_size + draft_token_id)
                         draft_prob_stride = vocab_size
