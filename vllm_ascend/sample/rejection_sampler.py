@@ -30,7 +30,13 @@ from vllm_ascend.ops.triton.reject_sample import (
     sample_recovered_tokens_kernel,
 )
 from vllm_ascend.sample.penalties import apply_all_penalties
+from vllm_ascend.sample.rejection_sampler_dfx import (
+    RejectionSamplerDFX,
+    RejectionSamplerErrorCode,
+)
 from vllm_ascend.sample.sampler import apply_top_k_top_p
+
+_dfx = RejectionSamplerDFX()
 
 
 class AscendRejectionSampler(RejectionSampler):
@@ -390,13 +396,24 @@ def rejection_sample(
     batch_size = len(num_draft_tokens)
     num_tokens = draft_token_ids.shape[0]
     device = target_logits.device
+
+    if _dfx.enabled:
+        _dfx.validate_tensor(draft_token_ids, "draft_token_ids", expected_ndim=1)
+        _dfx.validate_tensor(target_logits, "target_logits", expected_ndim=2)
+        _dfx.validate_tensor(cu_num_draft_tokens, "cu_num_draft_tokens", expected_ndim=1)
+        _dfx.validate_tensor(bonus_token_ids, "bonus_token_ids", expected_device=device)
+        if draft_probs is not None:
+            _dfx.validate_tensor(draft_probs, "draft_probs", expected_ndim=2, expected_device=device)
+        _dfx.record_request(sampling_metadata.all_greedy)
+        _dfx.record_draft_tokens(sum(num_draft_tokens))
+        _dfx.record_verify_enabled(using_block_verify, using_entropy_verify)
+
     assert draft_token_ids.is_contiguous()
     assert draft_probs is None or draft_probs.is_contiguous()
     assert target_logits.is_contiguous()
     assert bonus_token_ids.is_contiguous()
     assert target_logits.shape[0] == num_tokens
 
-    # Block verify requires enable_block_verify config and max_spec_len >= 3.
     using_block_verify = max_spec_len >= 3 and bool(get_ascend_config().rejection_sampler_config.enable_block_verify)
     using_entropy_verify = bool(get_ascend_config().rejection_sampler_config.enable_entropy_verify)
     posterior_threshold = float(get_ascend_config().rejection_sampler_config.posterior_threshold)
@@ -456,6 +473,17 @@ def rejection_sample(
             target_argmax = target_logits.argmax(dim=-1).view(-1)
 
         if HAS_TRITON:
+            if _dfx.enabled:
+                logger.debug(
+                    "[sample/rejection_sampler] Launching rejection_greedy_sample_with_triton: "
+                    "grid=%s, block_size=%s, batch_size=%s, max_spec_len=%s, device=%s",
+                    grid,
+                    block_size,
+                    batch_size,
+                    max_spec_len,
+                    device,
+                )
+                _dfx.record_triton_kernel_launch()
             rejection_greedy_sample_with_triton(
                 output_token_ids,
                 num_draft_tokens,
@@ -469,6 +497,15 @@ def rejection_sample(
                 block_size,
             )
         else:
+            if _dfx.enabled:
+                logger.debug(
+                    "[sample/rejection_sampler] Falling back to PyTorch greedy rejection sample: "
+                    "batch_size=%s, max_spec_len=%s, spec_len_1=%s",
+                    batch_size,
+                    max_spec_len,
+                    min(num_draft_tokens) == 1 and max(num_draft_tokens) == 1,
+                )
+                _dfx.record_pytorch_fallback()
             if min(num_draft_tokens) == 1 and max(num_draft_tokens) == 1 and sampling_metadata.all_greedy:
                 rejection_greedy_sample_spec_len_1_pytorch(
                     output_token_ids,
@@ -768,6 +805,26 @@ def rejection_sample(
                     EPSILON=1e-10,
                     ori_target_probs=ori_target_probs,
                 )
+
+    if _dfx.enabled:
+        _dfx.log_metrics_summary()
+        error_code = _dfx.check_placeholder_leak(output_token_ids)
+        if error_code != RejectionSamplerErrorCode.SUCCESS:
+            logger.warning(
+                "[sample/rejection_sampler_dfx] Placeholder token leak detected: "
+                "error_code=%s, output_shape=%s, num_placeholders=%s",
+                error_code,
+                output_token_ids.shape,
+                (output_token_ids == -1).sum().item(),
+            )
+        error_code = _dfx.check_acceptance_rate_anomaly()
+        if error_code != RejectionSamplerErrorCode.SUCCESS:
+            logger.warning(
+                "[sample/rejection_sampler_dfx] Acceptance rate anomaly: "
+                "error_code=%s, acceptance_rate=%.4f",
+                error_code,
+                _dfx.metrics.acceptance_rate,
+            )
 
     return output_token_ids
 
