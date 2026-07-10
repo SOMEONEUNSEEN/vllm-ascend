@@ -52,6 +52,7 @@ from vllm_ascend.quantization.methods.w8a8_static import AscendW8A8LinearMethod
 from vllm_ascend.quantization.utils import enable_fa_quant
 from vllm_ascend.utils import ACL_FORMAT_FRACTAL_ND, get_weight_prefetch_method, maybe_trans_nz, weak_ref_tensors
 from vllm_ascend.worker.npu_input_batch import NPUInputBatch
+from vllm.logger import logger
 
 if TYPE_CHECKING:
     from vllm.v1.core.sched.output import SchedulerOutput
@@ -473,23 +474,32 @@ class AscendMLAMetadataBuilder(MLACommonMetadataBuilder[AscendMLAMetadata]):
         reqs_start = self.num_decodes  # prefill_start
 
         self.context_lens_cpu = num_computed_tokens_cpu[reqs_start:num_reqs]
+        logger.info(f"[lys] self.context_lens_cpu: {self.context_lens_cpu}")
         max_context_len_cpu = self.context_lens_cpu.max().item()
         if not max_context_len_cpu > 0:
             return None
         num_prefills_with_context_cpu = (self.context_lens_cpu > 0).sum().item()
+        logger.info(f"[lys] num_prefills_with_context_cpu: {num_prefills_with_context_cpu}")
         self.max_context_chunk = self.chunked_prefill_workspace_size // num_prefills_with_context_cpu
+        logger.info(f"[lys] max_context_chunk0: {self.max_context_chunk}")
         self.max_context_chunk = round_down(self.max_context_chunk, self.block_size)
+        logger.info(f"[lys] max_context_chunk: {self.max_context_chunk}")
 
         assert self.max_context_chunk > 0
         self.num_chunks = cdiv(max_context_len_cpu, self.max_context_chunk)
+        logger.info(f"[lys] self.num_chunks: {self.num_chunks}")
         chunk_starts = (
             torch.arange(self.num_chunks, dtype=torch.int32).unsqueeze(1).expand(-1, self.num_prefills)
             * self.max_context_chunk
         )
         chunk_ends = torch.min(self.context_lens_cpu.unsqueeze(0), chunk_starts + self.max_context_chunk)
+        logger.info(f"[lys] chunk_ends: {chunk_ends}")
+        logger.info(f"[lys] chunk_starts: {chunk_starts}")
         self.chunk_seq_lens = (chunk_ends - chunk_starts).clamp(min=0)
         self.cu_seq_lens_cpu = torch.zeros(self.num_chunks, self.num_prefills + 1, dtype=torch.int32, pin_memory=True)
         torch.cumsum(self.chunk_seq_lens, dim=1, out=self.cu_seq_lens_cpu[:, 1:], dtype=torch.int32)
+        logger.info(f"[lys] self.chunk_seq_lens: {self.chunk_seq_lens}")
+        logger.info(f"[lys] self.chunk_seq_lens.sum(dim=1).tolist(): {self.chunk_seq_lens.sum(dim=1).tolist()}")
         return ChunkedContextMetadata(
             cu_seq_lens=self.cu_seq_lens_cpu.pin_memory().to(self.device, non_blocking=True),
             starts=chunk_starts.pin_memory().to(self.device, non_blocking=True),
