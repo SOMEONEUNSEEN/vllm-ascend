@@ -1059,6 +1059,7 @@ class AscendMLAImpl(MLAAttentionImpl):
     ):
         assert len(kv_c_and_k_pe_cache) > 1
         prefill_metadata = attn_metadata.prefill
+        logger.info(f"[lys] prefill_metadata.chunked_context: {prefill_metadata.chunked_context}")
         if prefill_metadata is None or prefill_metadata.chunked_context is None:
             return prefix_output, prefix_lse
 
