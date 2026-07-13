@@ -1120,7 +1120,9 @@ class AscendMLAImpl(MLAAttentionImpl):
             k_pe = k_pe.expand((*k_nope.shape[:-1], -1))
 
             actual_seq_lengths_kv = prefill_metadata.chunked_context.chunk_actual_seq_lengths_kv_list[i]
-
+            logger.info(f"[lys] num_heads: {self.num_heads}")
+            logger.info(f"[lys] actual_seq_lengths_q: {actual_seq_lengths_q}")
+            logger.info(f"[lys] actual_seq_lengths_kv: {actual_seq_lengths_kv}")
             chunk_out, chunk_lse = torch_npu.npu_fused_infer_attention_score(
                 q_nope,
                 k_nope,
