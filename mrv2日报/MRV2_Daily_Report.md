@@ -1,14 +1,36 @@
 # MRV2 每日报告
-生成时间: 2026-07-14 11:25:13
-统计范围: 最近 30 天
+生成时间: 2026-07-15 14:27:17
+统计范围: 最近 7 天
 
 **MRV2 定义**: `vllm/v1/worker/gpu/model_runner.py` 及其依赖的所有组件
 
-MRV2 相关 commits 总数: 94
+MRV2 相关 commits 总数: 24
+
+## 2026-07-15
+### vllm-ascend
+- **[6e784075](https://github.com/vllm-project/vllm-ascend/commit/6e784075dcc36b603296f03a50cdc005cffe5c61)** 【变更概述】【MRV2】[BugFix] 【MRV2】[MRV2] 【MRV2】修复：修复 quant DP full graph mode mrv2 【PR号】#11727 【变更类型】此提交为问题修复类型 【MRV2关联】此变更涉及 Model Runner V2 核心模块，需重点关注 【变更文件】修改 .github/workflows/scripts/test_config.yaml (+2/-0); 新增 tests/e2e/pull_request/two_card/model_runner_v2/test_data_parallel.py (+95/-0); 修改 tests/ut/worker/a2/test_worker_v1.py (+2/-4); 修改 vllm_ascend/quantization/method_adapters.py (+9/-0); 修改 vllm_ascend/worker/v2/aclgraph_utils.py (+1/-1); ... 及其他 2 个文件 【统计数据】共修改 7 个文件，新增 113 行，删除 8 行 【风险评估】低风险 - 变更范围较小，影响可控 【涉及模块】model-runner, spec-decode, quantization, tests
+  - 标签: `bugfix, mrv2, mrv2, low-risk, model-runner, spec-decode, quantization, ci, tests`
+
+---
+
+## 2026-07-14
+### vllm
+- **[26587f95](https://github.com/vllm-project/vllm/commit/26587f9519e22a5c4549ead7595ad9ca3229c4fd)** 【变更概述】【MRV2】[BugFix] 【MRV2】[ModelRunner V2] 【MRV2】修复：修复 stale attn metadata speculator prefill cudagraph capture 【PR号】#48261 【变更类型】此提交为问题修复类型 【MRV2关联】此变更涉及 Model Runner V2 核心模块，需重点关注 【变更文件】修改 vllm/v1/worker/gpu/cudagraph_utils.py (+17/-35); 修改 vllm/v1/worker/gpu/model_runner.py (+7/-3); 修改 vllm/v1/worker/gpu/spec_decode/autoregressive/cudagraph_utils.py (+11/-45); 修改 vllm/v1/worker/gpu/spec_decode/autoregressive/speculator.py (+14/-12); 修改 vllm/v1/worker/gpu/spec_decode/dflash/cudagraph.py (+2/-3); ... 及其他 2 个文件 【统计数据】共修改 7 个文件，新增 72 行，删除 108 行 【风险评估】高风险 - 涉及核心接口或架构变更，可能影响系统稳定性 【涉及模块】model-runner, spec-decode
+  - 标签: `bugfix, mrv2, high-risk, model-runner, spec-decode`
+  - Ascend 影响: ✓ 无影响
+
+### vllm-ascend
+- **[f6b33f49](https://github.com/vllm-project/vllm-ascend/commit/f6b33f49cd732733769374c19b68d26a5c210ec0)** 【变更概述】【MRV2】[Refactor] 【MRV2】[Attention] 【MRV2】更新：移除 paged 注意力 【PR号】#11899 【变更类型】此提交为代码重构类型 【MRV2关联】此变更涉及 Model Runner V2 核心模块，需重点关注 【变更文件】修改 csrc/attention/kv_quant_sparse_flash_attention/op_host/kv_quant_sparse_flash_attention_tiling.cpp (+0/-1); 修改 docs/source/faqs.md (+0/-4); 修改 docs/source/locale/zh_CN/LC_MESSAGES/faqs.po (+0/-18); 修改 docs/source/locale/zh_CN/LC_MESSAGES/user_guide/configuration/additional_config.po (+0/-9); 修改 docs/source/tutorials/features/suffix_speculative_decoding.md (+1/-1); ... 及其他 10 个文件 【统计数据】共修改 15 个文件，新增 19 行，删除 412 行 【风险评估】高风险 - 涉及核心接口或架构变更，可能影响系统稳定性 【涉及模块】model-runner, attention, tests
+  - 标签: `refactor, high-risk, model-runner, attention, tests, docs`
+
+- **[5083d884](https://github.com/vllm-project/vllm-ascend/commit/5083d8844310831258f085ea6dfcac4a2f76ef58)** 【变更概述】【MRV2】[CI] 【MRV2】更新：main2main 0710 【PR号】#11709 【变更类型】此提交为日常维护类型 【MRV2关联】此变更涉及 Model Runner V2 核心模块，需重点关注 【变更文件】修改 .github/vllm-main-verified.commit (+1/-1); 修改 pyproject.toml (+1/-1); 修改 requirements.txt (+1/-1); 修改 tests/e2e/pull_request/one_card/spec_decode/test_extract_hidden_states.py (+5/-25); 修改 tests/ut/patch/platform/test_patch_deepseek_v4_tool_call_parser.py (+11/-1); ... 及其他 14 个文件 【统计数据】共修改 19 个文件，新增 780 行，删除 92 行 【风险评估】高风险 - 涉及核心接口或架构变更，可能影响系统稳定性 【涉及模块】model-runner, sample, distributed, spec-decode, kv-cache, patch, tests
+  - 标签: `chore, mrv2, high-risk, model-runner, sample, distributed, spec-decode, kv-cache, patch, ci, tests`
+
+---
 
 ## 2026-07-13
 ### vllm
-- **[1be6e937](https://github.com/vllm-project/vllm/commit/1be6e937b2b49bae652370d80294f6171bd7b981)** 涉及 Model Runner 模块，修改 vllm/v1/worker/gpu_model_runner.py，变更 5 行，删除 1 行。
+- **[1be6e937](https://github.com/vllm-project/vllm/commit/1be6e937b2b49bae652370d80294f6171bd7b981)** 【变更概述】【MRV2】更新：降低 内存 所需 捕获 CUDA图 大 cudagraph 尺寸 【PR号】#48483 【变更类型】此提交为常规更新类型 【MRV2关联】此变更涉及 Model Runner V2 核心模块，需重点关注 【变更文件】修改 vllm/v1/worker/gpu_model_runner.py (+5/-1) 【统计数据】共修改 1 个文件，新增 5 行，删除 1 行 【风险评估】高风险 - 涉及核心接口或架构变更，可能影响系统稳定性 【涉及模块】model-runner
   - 标签: `mrv2, high-risk, model-runner`
   - Ascend 影响: ⚠️ 影响 Ascend
   - 影响描述: 修改了 vLLM 核心接口文件 vllm/v1/worker/gpu_model_runner.py，可能影响 vllm-ascend 的适配实现
@@ -22,19 +44,19 @@ MRV2 相关 commits 总数: 94
 
 ## 2026-07-12
 ### vllm
-- **[a02984ed](https://github.com/vllm-project/vllm/commit/a02984ed471488c0f0e8f73cab21be4325992d4c)** 变更：[Perf][Qwen] Replace MOE all-reduce with reduce-scatter (#47006)
+- **[a02984ed](https://github.com/vllm-project/vllm/commit/a02984ed471488c0f0e8f73cab21be4325992d4c)** 【变更概述】[Perf] 更新：Qwen Replace MoE all-reduce reduce-scatter 【PR号】#47006 【变更类型】此提交为性能优化类型 【变更文件】修改 vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py (+2/-0); 修改 vllm/model_executor/models/qwen3_5.py (+9/-0); 修改 vllm/model_executor/models/qwen3_next.py (+102/-11) 【统计数据】共修改 3 个文件，新增 113 行，删除 11 行 【风险评估】中风险 - 涉及一定范围的功能修改，需要验证
   - 标签: `performance, model-runner, medium-risk, attention`
   - Ascend 影响: ⚠️ 影响 Ascend
   - 影响描述: 涉及 vLLM 核心代码变更（vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py, vllm/model_executor/models/qwen3_5.py, vllm/model_executor/models/qwen3_next.py），可能影响 vllm-ascend 的相应模块实现。建议 Ascend 侧关注接口兼容性。
   - 建议测试区域: vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py, vllm/model_executor/models/qwen3_5.py, vllm/model_executor/models/qwen3_next.py
 
-- **[fc1c5480](https://github.com/vllm-project/vllm/commit/fc1c548093029f6487bbdc9c612995dfe7621a75)** 变更：Runtime Draft Weight Update for Speculative Decoding (#46725)
+- **[fc1c5480](https://github.com/vllm-project/vllm/commit/fc1c548093029f6487bbdc9c612995dfe7621a75)** 【变更概述】【MRV2】更新：Runtime Draft Weight 更新 Speculative Decoding 【PR号】#46725 【变更类型】此提交为文档更新类型 【变更文件】修改 docs/training/weight_transfer/base.md (+4/-0); 修改 tests/entrypoints/openai/test_openai_schema.py (+1/-0); 修改 tests/v1/worker/test_gpu_worker_weight_transfer.py (+6/-0); 修改 vllm/distributed/weight_transfer/base.py (+18/-0); 修改 vllm/distributed/weight_transfer/sparse_nccl_engine.py (+1/-0); ... 及其他 7 个文件 【统计数据】共修改 12 个文件，新增 129 行，删除 1 行 【风险评估】低风险 - 变更范围较小，影响可控
   - 标签: `docs, worker, engine, model-runner, low-risk, distributed`
   - Ascend 影响: ⚠️ 影响 Ascend
   - 影响描述: 涉及 vLLM 核心代码变更（vllm/distributed/weight_transfer/base.py, vllm/distributed/weight_transfer/sparse_nccl_engine.py, vllm/engine/protocol.py），可能影响 vllm-ascend 的相应模块实现。建议 Ascend 侧关注接口兼容性。
   - 建议测试区域: vllm/distributed/weight_transfer/base.py, vllm/distributed/weight_transfer/sparse_nccl_engine.py, vllm/engine/protocol.py, vllm/entrypoints/llm.py, vllm/entrypoints/serve/dev/rlhf/api_router.py
 
-- **[481e481b](https://github.com/vllm-project/vllm/commit/481e481be786c1ca3229e26aa34c15ffd22375af)** 变更：[2/N][Core] support partial prefix cache hit for hybrid model (#46384)
+- **[481e481b](https://github.com/vllm-project/vllm/commit/481e481be786c1ca3229e26aa34c15ffd22375af)** 【变更概述】【MRV2】[2/N] 修复：核心 支持 partial prefix 缓存 hit hybrid model 【PR号】#46384 【变更类型】此提交为问题修复类型 【变更文件】新增 tests/v1/core/prefix_cache/test_partial_prefix_cache_hits.py (+816/-0); 修改 tests/v1/core/test_deferred_block_free.py (+62/-0); 修改 tests/v1/core/test_kv_cache_utils.py (+60/-0); 修改 tests/v1/core/test_prefix_caching.py (+4/-1); 修改 tests/v1/core/test_single_type_kv_cache_manager.py (+8/-6); ... 及其他 16 个文件 【统计数据】共修改 21 个文件，新增 1651 行，删除 175 行 【风险评估】中风险 - 涉及一定范围的功能修改，需要验证
   - 标签: `worker, engine, model-runner, config, scheduler, prefix-caching, bugfix, distributed, medium-risk`
   - Ascend 影响: ⚠️ 影响 Ascend
   - 影响描述: 涉及 vLLM 核心代码变更（vllm/config/cache.py, vllm/distributed/kv_transfer/kv_connector/v1/mooncake/store/coordinator.py, vllm/distributed/kv_transfer/kv_connector/v1/mooncake/store/worker.py），可能影响 vllm-ascend 的相应模块实现。建议 Ascend 侧关注接口兼容性。
@@ -64,33 +86,33 @@ MRV2 相关 commits 总数: 94
   - 标签: ``
   - Ascend 影响: ✓ 无影响
 
-- **[433f2911](https://github.com/vllm-project/vllm/commit/433f291195ded3ca8d278bc78da9280c5d4e5329)** （自动判定）仅涉及 tests / docs / CI / 平台特化代码变更，不影响 vllm-ascend。
+- **[433f2911](https://github.com/vllm-project/vllm/commit/433f291195ded3ca8d278bc78da9280c5d4e5329)** 【变更概述】【MRV2】[CI] 维护：Right-size test-area timeouts from nightly durations 【PR号】#48186 【变更类型】此提交为日常维护类型 【MRV2关联】此变更涉及 Model Runner V2 核心模块，需重点关注 【变更文件】修改 .buildkite/test_areas/attention.yaml (+3/-3); 修改 .buildkite/test_areas/basic_correctness.yaml (+2/-2); 修改 .buildkite/test_areas/benchmarks.yaml (+2/-2); 修改 .buildkite/test_areas/compile.yaml (+11/-11); 修改 .buildkite/test_areas/cuda.yaml (+2/-2); ... 及其他 25 个文件 【统计数据】共修改 30 个文件，新增 183 行，删除 183 行 【风险评估】低风险 - 变更范围较小，影响可控
   - 标签: `chore, mrv2`
   - Ascend 影响: ✓ 无影响
 
-- **[95ed0fea](https://github.com/vllm-project/vllm/commit/95ed0feaa5cd7fb16d72c53ce04950aaf07c4698)** 常规维护变更。涉及 Model Runner V2 相关改动。涉及 Model Runner V2 相关改动。涉及 Model Runner V2 相关改动。【MRV2】涉及 Model Runner V2 相关改动。
+- **[95ed0fea](https://github.com/vllm-project/vllm/commit/95ed0feaa5cd7fb16d72c53ce04950aaf07c4698)** 【变更概述】【MRV2】新增：DCP supports hybrid 注意力 【PR号】#40996 【变更类型】此提交为日常维护类型 【MRV2关联】此变更涉及 Model Runner V2 核心模块，需重点关注 【变更文件】修改 tests/distributed/test_context_parallel.py (+8/-0); 修改 tests/distributed/test_pynccl.py (+47/-0); 修改 tests/models/language/generation/test_hybrid.py (+13/-1); 修改 tests/models/multimodal/generation/test_vit_cudagraph.py (+1/-0); 修改 tests/test_config.py (+4/-4); ... 及其他 21 个文件 【统计数据】共修改 26 个文件，新增 785 行，删除 127 行 【风险评估】低风险 - 变更范围较小，影响可控
   - 标签: `chore, mrv2, distributed, attention, python, model-runner, low-risk`
   - Ascend 影响: ⚠️ 影响 Ascend
   - 影响描述: 可能影响 vllm-ascend 的接口或实现
   - 建议测试区域: vllm/config/model.py, vllm/v1/attention/backend.py, vllm/v1/attention/backends/flash_attn.py, vllm/v1/core/kv_cache_coordinator.py, vllm/v1/core/kv_cache_utils.py, vllm/v1/core/single_type_kv_cache_manager.py, vllm/v1/kv_cache_interface.py, vllm/v1/worker/block_table.py, vllm/v1/worker/cp_utils.py, vllm/v1/worker/gpu_input_batch.py, vllm/v1/worker/gpu_model_runner.py, vllm/v1/worker/tpu_input_batch.py
 
-- **[766469a4](https://github.com/vllm-project/vllm/commit/766469a4c460043ae52cda19b1c52f0dc87e555c)** （自动判定）仅涉及 tests / docs / CI / 平台特化代码变更，不影响 vllm-ascend。
+- **[766469a4](https://github.com/vllm-project/vllm/commit/766469a4c460043ae52cda19b1c52f0dc87e555c)** 【变更概述】[ROCm] 修复：Revert Part `[ROCm 修复 pooling startup workspace lock` 【PR号】#48154 【变更类型】此提交为问题修复类型 【MRV2关联】此变更涉及 Model Runner V2 核心模块，需重点关注 【变更文件】修改 vllm/v1/worker/gpu_worker.py (+3/-22) 【统计数据】共修改 1 个文件，新增 3 行，删除 22 行 【风险评估】低风险 - 变更范围较小，影响可控
   - 标签: `bugfix, low-risk, mrv2`
   - Ascend 影响: ✓ 无影响
 
-- **[ff8d3488](https://github.com/vllm-project/vllm/commit/ff8d3488f248acc8b5c1d23243723eeb00c74914)** 常规维护变更。【MRV2】涉及 Model Runner V2 相关改动。
+- **[ff8d3488](https://github.com/vllm-project/vllm/commit/ff8d3488f248acc8b5c1d23243723eeb00c74914)** 【变更概述】[Bugfix] 新增：MRV2 Reset num_accepted_tokens add_request all modes 【PR号】#48132 【变更类型】此提交为日常维护类型 【MRV2关联】此变更涉及 Model Runner V2 核心模块，需重点关注 【变更文件】修改 vllm/v1/worker/gpu/model_states/mamba_hybrid.py (+2/-1) 【统计数据】共修改 1 个文件，新增 2 行，删除 1 行 【风险评估】低风险 - 变更范围较小，影响可控
   - 标签: `chore, mrv2, low-risk, python`
   - Ascend 影响: ⚠️ 影响 Ascend
   - 影响描述: 可能影响 vllm-ascend 的接口或实现
   - 建议测试区域: vllm/v1/worker/gpu/model_states/mamba_hybrid.py
 
-- **[e08a9151](https://github.com/vllm-project/vllm/commit/e08a9151468190575114de1c996275b993ec940a)** 常规维护变更。
+- **[e08a9151](https://github.com/vllm-project/vllm/commit/e08a9151468190575114de1c996275b993ec940a)** 【变更概述】[Bugfix] 更新：Preserve tensor causal metadata grouped 注意力 【PR号】#48135 【变更类型】此提交为日常维护类型 【变更文件】修改 vllm/v1/worker/gpu/attn_utils.py (+4/-2) 【统计数据】共修改 1 个文件，新增 4 行，删除 2 行 【风险评估】低风险 - 变更范围较小，影响可控
   - 标签: `chore, low-risk, python`
   - Ascend 影响: ⚠️ 影响 Ascend
   - 影响描述: 可能影响 vllm-ascend 的接口或实现
   - 建议测试区域: vllm/v1/worker/gpu/attn_utils.py
 
-- **[67e7ea89](https://github.com/vllm-project/vllm/commit/67e7ea8977bc4281d4d33dd3a81a5c5fab3df920)** （自动判定）仅涉及 tests / docs / CI / 平台特化代码变更，不影响 vllm-ascend。
+- **[67e7ea89](https://github.com/vllm-project/vllm/commit/67e7ea8977bc4281d4d33dd3a81a5c5fab3df920)** 【变更概述】[ROCm] 维护：CI Set all timeout_in_minutes 180 【PR号】#48146 【变更类型】此提交为日常维护类型 【MRV2关联】此变更涉及 Model Runner V2 核心模块，需重点关注 【变更文件】修改 .buildkite/test-amd.yaml (+27/-27) 【统计数据】共修改 1 个文件，新增 27 行，删除 27 行 【风险评估】低风险 - 变更范围较小，影响可控
   - 标签: `chore, mrv2`
   - Ascend 影响: ✓ 无影响
 
@@ -106,15 +128,15 @@ MRV2 相关 commits 总数: 94
   - 标签: ``
   - Ascend 影响: ✓ 无影响
 
-- **[95d6d6f4](https://github.com/vllm-project/vllm/commit/95d6d6f4bba8234088e62124ff20a482acd98714)** （自动判定）仅涉及 tests / docs / CI / 平台特化代码变更，不影响 vllm-ascend。
+- **[95d6d6f4](https://github.com/vllm-project/vllm/commit/95d6d6f4bba8234088e62124ff20a482acd98714)** 【变更概述】[Bugfix] 更新：Use int8 workspace FlashInfer MLA decode 【PR号】#48046 【变更类型】此提交为问题修复类型 【MRV2关联】此变更涉及 Model Runner V2 核心模块，需重点关注 【变更文件】修改 tests/kernels/attention/test_flashinfer_mla_decode.py (+87/-45); 修改 vllm/v1/attention/backends/mla/flashinfer_mla.py (+3/-1); 修改 vllm/v1/attention/backends/mla/flashinfer_mla_sparse.py (+3/-1) 【统计数据】共修改 3 个文件，新增 93 行，删除 47 行 【风险评估】低风险 - 变更范围较小，影响可控
   - 标签: `bugfix, low-risk, mrv2`
   - Ascend 影响: ✓ 无影响
 
-- **[26831949](https://github.com/vllm-project/vllm/commit/26831949b48a0d81fba379dcaf7e378206fd9087)** （自动判定）仅涉及 tests / docs / CI / 平台特化代码变更，不影响 vllm-ascend。
+- **[26831949](https://github.com/vllm-project/vllm/commit/26831949b48a0d81fba379dcaf7e378206fd9087)** 【变更概述】[ROCm] 修复：修复 pooling startup workspace lock 【PR号】#47912 【变更类型】此提交为问题修复类型 【MRV2关联】此变更涉及 Model Runner V2 核心模块，需重点关注 【变更文件】修改 vllm/v1/attention/backends/rocm_attn.py (+3/-0); 修改 vllm/v1/attention/backends/triton_attn.py (+1/-0); 修改 vllm/v1/attention/ops/triton_prefill_attention.py (+14/-2); 修改 vllm/v1/worker/gpu_worker.py (+22/-3) 【统计数据】共修改 4 个文件，新增 40 行，删除 5 行 【风险评估】低风险 - 变更范围较小，影响可控
   - 标签: `bugfix, low-risk, mrv2`
   - Ascend 影响: ✓ 无影响
 
-- **[a5d19cbb](https://github.com/vllm-project/vllm/commit/a5d19cbb95872c4b426c06735733568542fa33db)** （自动判定）仅涉及 tests / docs / CI / 平台特化代码变更，不影响 vllm-ascend。
+- **[a5d19cbb](https://github.com/vllm-project/vllm/commit/a5d19cbb95872c4b426c06735733568542fa33db)** 【变更概述】【MRV2】[Core] 更新：Move MRV1 `late_interaction_runner.py` out MRV2 subtree 【PR号】#48014 【变更类型】此提交为日常维护类型 【MRV2关联】此变更涉及 Model Runner V2 核心模块，需重点关注 【变更文件】修改 tests/v1/worker/test_late_interaction_runner.py (+1/-1); 重命名 vllm/v1/pool/late_interaction_runner.py (+0/-0); 修改 vllm/v1/worker/gpu_model_runner.py (+1/-1) 【统计数据】共修改 3 个文件，新增 2 行，删除 2 行 【风险评估】低风险 - 变更范围较小，影响可控
   - 标签: `chore, mrv2`
   - Ascend 影响: ✓ 无影响
 
