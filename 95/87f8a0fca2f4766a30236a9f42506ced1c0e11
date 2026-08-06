@@ -1,0 +1,24 @@
+vllm_ascend/spec_decode/llm_base_proposer.py
+  s_ceef4a51aec037::t_e6854ad7ae717a 56,1305,1310-1327
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.2",
+  "base_commit_sha": "9587f8a0fca2f4766a30236a9f42506ced1c0e11",
+  "prompts": {},
+  "humans": {
+    "h_04e6116ac3276d": {
+      "author": "liyishi <1252651434@qq.com>"
+    }
+  },
+  "sessions": {
+    "s_ceef4a51aec037": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a6b42747cf01c667403dd0c",
+        "model": "glm-5.2__dev"
+      },
+      "human_author": "liyishi <1252651434@qq.com>"
+    }
+  }
+}
