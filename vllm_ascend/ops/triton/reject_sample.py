@@ -406,9 +406,11 @@ def sample_recovered_tokens_kernel(
                 new_p = prob / q
                 recovered_id = tl.argmax(new_p, axis=-1)
                 max_p = get_element(new_p, (recovered_id,))
-                if max_p > global_max_p:
-                    global_max_p = max_p
-                    global_recovered_id = vocab_start + recovered_id
+                better = max_p > global_max_p
+                global_max_p = tl.where(better, max_p, global_max_p)
+                global_recovered_id = tl.where(
+                    better, vocab_start + recovered_id, global_recovered_id
+                )
         else:
             for loop_i in range(loop):
                 vocab_start = loop_i * SUB_BLOCK
@@ -433,9 +435,11 @@ def sample_recovered_tokens_kernel(
                 new_p = prob / q
                 recovered_id = tl.argmax(new_p, axis=-1)
                 max_p = get_element(new_p, (recovered_id,))
-                if max_p > global_max_p:
-                    global_max_p = max_p
-                    global_recovered_id = vocab_start + recovered_id
+                better = max_p > global_max_p
+                global_max_p = tl.where(better, max_p, global_max_p)
+                global_recovered_id = tl.where(
+                    better, vocab_start + recovered_id, global_recovered_id
+                )
 
         tl.store(output_token_ids_ptr + start_idx + pos, global_recovered_id)
 
