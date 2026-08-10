@@ -849,6 +849,17 @@ def sample_recovered_tokens(
 
     recovered_token_ids = torch.empty_like(draft_token_ids)
     if HAS_TRITON:
+        logger.info(f"[lys] batch_size={batch_size}")
+        logger.info(f"[lys] max_spec_len={max_spec_len}")
+        logger.info(f"[lys] vocab_size={vocab_size}")
+        logger.info(f"[lys] global_vocab_size={global_vocab_size}")
+        logger.info(f"[lys] recovered_token_ids={recovered_token_ids}")
+        logger.info(f"[lys] cu_num_draft_tokens={cu_num_draft_tokens.size()}")
+        logger.info(f"[lys] draft_token_ids={draft_token_ids}")
+        logger.info(f"[lys] draft_probs={draft_probs.size()}")
+        logger.info(f"[lys] target_probs={target_probs.size()}")
+        logger.info(f"[lys] target_indices={target_indices}")
+        logger.info(f"[lys] q={q.size()}")
         sample_recovered_tokens_kernel[(batch_size, max_spec_len)](
             recovered_token_ids,
             cu_num_draft_tokens,
@@ -866,6 +877,17 @@ def sample_recovered_tokens(
             # TODO: enable multibuffer when accuracy problem is solved.
             multibuffer=False,
         )
+        # logger.info(f"[lys] batch_size={batch_size}")
+        # logger.info(f"[lys] max_spec_len={max_spec_len}")
+        # logger.info(f"[lys] vocab_size={vocab_size}")
+        # logger.info(f"[lys] global_vocab_size={global_vocab_size}")
+        logger.info(f"[lys] recovered_token_ids={recovered_token_ids}")
+        # logger.info(f"[lys] cu_num_draft_tokens={cu_num_draft_tokens.size()}")
+        logger.info(f"[lys] draft_token_ids={draft_token_ids}")
+        # logger.info(f"[lys] draft_probs={draft_probs.size()}")
+        # logger.info(f"[lys] target_probs={target_probs.size()}")
+        # logger.info(f"[lys] target_indices={target_indices}")
+        # logger.info(f"[lys] q={q.size()}")
     elif use_block_verify:
         sample_recovered_tokens_blockwise_pytorch(
             recovered_token_ids,
