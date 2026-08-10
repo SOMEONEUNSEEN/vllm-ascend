@@ -349,7 +349,7 @@ def sample_recovered_tokens_kernel(
         global_recovered_id = tl.full((), -1, tl.int64)
         draft_token_id = tl.load(draft_token_ids_ptr + token_idx).to(tl.int64)
 
-        for li in range(n_loop):
+        for li in tl.range(n_loop):
             c_start = li * VOCAB_BLOCK_SIZE
             offs = c_start + tl.arange(0, VOCAB_BLOCK_SIZE)
             mask = offs < C
@@ -387,11 +387,11 @@ def sample_recovered_tokens_kernel(
     else:
         vocab_size = global_vocab_size
         loop = (vocab_size + SUB_BLOCK - 1) // SUB_BLOCK
-        global_recovered_id = -1
-        global_max_p = -1.0
+        global_max_p = tl.full((), -float("inf"), tl.float32)
+        global_recovered_id = tl.full((), -1, tl.int64)
         if NO_DRAFT_PROBS:
             draft_token_id = tl.load(draft_token_ids_ptr + start_idx + pos)
-            for loop_i in range(loop):
+            for loop_i in tl.range(loop):
                 vocab_start = loop_i * SUB_BLOCK
                 vocab_offset = vocab_start + tl.arange(0, SUB_BLOCK)
                 prob = tl.load(
@@ -401,18 +401,20 @@ def sample_recovered_tokens_kernel(
                 )
                 prob = tl.where(vocab_offset == draft_token_id, 0.0, prob)
                 q = tl.load(
-                    q_ptr + req_idx * vocab_size + vocab_offset, mask=vocab_offset < vocab_size, other=float("-inf")
+                    q_ptr + req_idx * vocab_size + vocab_offset, mask=vocab_offset < vocab_size, other=1.0
                 )
-                new_p = prob / q
-                recovered_id = tl.argmax(new_p, axis=-1)
-                max_p = get_element(new_p, (recovered_id,))
+                bad_q = (q <= 0) | (q != q) | (q == float("inf")) | (q == -float("inf"))
+                new_p = tl.where(bad_q, float("-inf"), prob / q)
+                new_p = tl.where(vocab_offset < vocab_size, new_p, float("-inf"))
+                max_p = tl.max(new_p, axis=0)
+                recovered_id = tl.argmax(new_p, axis=0)
                 better = max_p > global_max_p
                 global_max_p = tl.where(better, max_p, global_max_p)
                 global_recovered_id = tl.where(
                     better, vocab_start + recovered_id, global_recovered_id
                 )
         else:
-            for loop_i in range(loop):
+            for loop_i in tl.range(loop):
                 vocab_start = loop_i * SUB_BLOCK
                 vocab_offset = vocab_start + tl.arange(0, SUB_BLOCK)
                 draft_prob = tl.load(
@@ -430,11 +432,13 @@ def sample_recovered_tokens_kernel(
                 # `tl.argmax` will select the maximum value.
 
                 q = tl.load(
-                    q_ptr + req_idx * vocab_size + vocab_offset, mask=vocab_offset < vocab_size, other=float("-inf")
+                    q_ptr + req_idx * vocab_size + vocab_offset, mask=vocab_offset < vocab_size, other=1.0
                 )
-                new_p = prob / q
-                recovered_id = tl.argmax(new_p, axis=-1)
-                max_p = get_element(new_p, (recovered_id,))
+                bad_q = (q <= 0) | (q != q) | (q == float("inf")) | (q == -float("inf"))
+                new_p = tl.where(bad_q, float("-inf"), prob / q)
+                new_p = tl.where(vocab_offset < vocab_size, new_p, float("-inf"))
+                max_p = tl.max(new_p, axis=0)
+                recovered_id = tl.argmax(new_p, axis=0)
                 better = max_p > global_max_p
                 global_max_p = tl.where(better, max_p, global_max_p)
                 global_recovered_id = tl.where(

@@ -31,6 +31,7 @@ from vllm_ascend.ops.triton.reject_sample import (
 )
 from vllm_ascend.sample.penalties import apply_all_penalties
 from vllm_ascend.sample.sampler import apply_top_k_top_p
+from vllm_ascend.utils import global_stream, npu_stream_switch
 
 
 class AscendRejectionSampler(RejectionSampler):
@@ -832,20 +833,22 @@ def sample_recovered_tokens(
     batch_size = len(num_draft_tokens)
     vocab_size = target_probs.shape[-1]
 
-    q = torch.empty(
-        (batch_size, vocab_size),
-        dtype=torch.float32,
-        device=device,
-    )
-    q.exponential_()
+    with npu_stream_switch(global_stream()):
+        q = torch.empty(
+            (batch_size, vocab_size),
+            dtype=torch.float32,
+            device=device,
+        )
+        q.exponential_()
 
-    num_draft_tensor = torch.tensor(num_draft_tokens, pin_memory=True).to(device, non_blocking=True)
-    has_draft_mask = num_draft_tensor > 0
+        num_draft_tensor = torch.tensor(num_draft_tokens, pin_memory=True).to(device, non_blocking=True)
+        has_draft_mask = num_draft_tensor > 0
 
-    for i, generator in sampling_metadata.generators.items():
-        temp_q = torch.empty_like(q[i])
-        temp_q.exponential_(generator=generator)
-        q[i] = torch.where(has_draft_mask[i], temp_q, q[i])
+        for i, generator in sampling_metadata.generators.items():
+            temp_q = torch.empty_like(q[i])
+            temp_q.exponential_(generator=generator)
+            q[i] = torch.where(has_draft_mask[i], temp_q, q[i])
+    torch.npu.current_stream().wait_stream(global_stream())
 
     recovered_token_ids = torch.empty_like(draft_token_ids)
     if HAS_TRITON:
@@ -856,7 +859,7 @@ def sample_recovered_tokens(
         logger.info(f"[lys] recovered_token_ids={recovered_token_ids}")
         logger.info(f"[lys] cu_num_draft_tokens={cu_num_draft_tokens.size()}")
         logger.info(f"[lys] draft_token_ids={draft_token_ids}")
-        logger.info(f"[lys] draft_probs={draft_probs.size()}")
+        logger.info(f"[lys] draft_probs={draft_probs}")
         logger.info(f"[lys] target_probs={target_probs.size()}")
         logger.info(f"[lys] target_indices={target_indices}")
         logger.info(f"[lys] q={q.size()}")
