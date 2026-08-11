@@ -1,0 +1,38 @@
+vllm_ascend/ops/dsa.py
+  s_9cd47aefc2d005::t_a73ddba55e6024 223,230
+  s_9cd47aefc2d005::t_b3b065d07c80c9 22,32-52
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.2",
+  "base_commit_sha": "5c284626af331a3bb2e60e29a0aa47c3d6f57503",
+  "prompts": {},
+  "humans": {
+    "h_04e6116ac3276d": {
+      "author": "liyishi <1252651434@qq.com>"
+    }
+  },
+  "sessions": {
+    "s_9cd47aefc2d005": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a793b5d7cf01c667403e53b",
+        "model": "glm-5.2"
+      },
+      "human_author": "liyishi <1252651434@qq.com>",
+      "custom_attributes": {
+        "edit_kind": "file_edit",
+        "session_id": "6a793b5d7cf01c667403e53b",
+        "operation_id": "6a7a9c83e2daf30b13f61acf",
+        "tool_use_id": "6a7a9c83e2daf30b13f61acf",
+        "external_session_id": "6a793b5d7cf01c667403e53b",
+        "runtime_client": "trae-tob-git-ai",
+        "source_scene": "agent",
+        "client_type": "ide",
+        "tool_type": "builtin",
+        "tool_id": "icube:applyChatSnapshotPatch",
+        "dedupe_key": "6a793b5d7cf01c667403e53b:6a7a9c83e2daf30b13f61acf:afterEdit:5bbfda9a"
+      }
+    }
+  }
+}
