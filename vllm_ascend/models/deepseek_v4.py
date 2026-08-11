@@ -58,12 +58,12 @@ def _check_nan_inf(tensor: torch.Tensor, tag: str, layer_idx: int | None = None)
     min_v = tensor.min().item() if not has_nan else "NaN"
     max_v = tensor.max().item() if not has_nan else "NaN"
     if layer_idx is not None:
-        logger.warning(
+        logger.info(
             "[pd_diag] layer[%d] %s has NaN=%s, inf=%s, shape=%s, min=%s, max=%s",
             layer_idx, tag, has_nan, has_inf, tuple(tensor.shape), min_v, max_v,
         )
     else:
-        logger.warning(
+        logger.info(
             "[pd_diag] %s has NaN=%s, inf=%s, shape=%s, min=%s, max=%s",
             tag, has_nan, has_inf, tuple(tensor.shape), min_v, max_v,
         )
