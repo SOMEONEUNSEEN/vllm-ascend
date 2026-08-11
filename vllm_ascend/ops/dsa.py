@@ -19,7 +19,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# import logging
+import logging
 from dataclasses import dataclass
 
 import torch
@@ -29,27 +29,27 @@ from vllm.forward_context import ForwardContext, get_forward_context
 from vllm.model_executor.layers.mla import MultiHeadLatentAttentionWrapper
 from vllm.model_executor.layers.quantization import QuantizationConfig
 from vllm.utils.torch_utils import direct_register_custom_op
-#
-# _dsa_logger = logging.getLogger(__name__)
-#
-#
-# @torch._dynamo.disable
-# def _check_kv_cache_nan(kv_cache, prefix: str, when: str) -> None:
-#     """[diag] Check KV cache for NaN/inf without breaking torch.compile graphs."""
-#     if kv_cache is None:
-#         return
-#     for ci, cache in enumerate(kv_cache):
-#         if cache is None or not isinstance(cache, torch.Tensor):
-#             continue
-#         has_nan = torch.isnan(cache).any().item()
-#         has_inf = torch.isinf(cache).any().item()
-#         if not (has_nan or has_inf):
-#             continue
-#         _dsa_logger.info(
-#             "[pd_diag] layer[%s] KV cache[%d] %s forward has NaN=%s, inf=%s, "
-#             "shape=%s, dtype=%s",
-#             prefix, ci, when, has_nan, has_inf, tuple(cache.shape), cache.dtype,
-#         )
+
+_dsa_logger = logging.getLogger(__name__)
+
+
+@torch._dynamo.disable
+def _check_kv_cache_nan(kv_cache, prefix: str, when: str) -> None:
+    """[diag] Check KV cache for NaN/inf without breaking torch.compile graphs."""
+    if kv_cache is None:
+        return
+    for ci, cache in enumerate(kv_cache):
+        if cache is None or not isinstance(cache, torch.Tensor):
+            continue
+        has_nan = torch.isnan(cache).any().item()
+        has_inf = torch.isinf(cache).any().item()
+        if not (has_nan or has_inf):
+            continue
+        _dsa_logger.warning(
+            "[pd_diag] layer[%s] KV cache[%d] %s forward has NaN=%s, inf=%s, "
+            "shape=%s, dtype=%s",
+            prefix, ci, when, has_nan, has_inf, tuple(cache.shape), cache.dtype,
+        )
 from vllm.v1.attention.backend import AttentionMetadata
 
 from vllm_ascend.models.layer.attention.layer import DSAAttention
@@ -220,14 +220,14 @@ def dsa_forward(
 
     # [diag] Check KV cache BEFORE forward for NaN/inf (PD disagg debugging)
     # This distinguishes KV cache corruption (from transfer) vs computation errors
-    # _check_kv_cache_nan(kv_cache, self.prefix, "BEFORE")
+    _check_kv_cache_nan(kv_cache, self.prefix, "BEFORE")
 
     self.dsa_attn.impl.forward(
         self.dsa_attn.layer_name, hidden_states, kv_cache, attn_metadata, need_gather_q_kv, output
     )
 
     # [diag] Check KV cache AFTER forward for NaN/inf (catches write corruption)
-    # _check_kv_cache_nan(kv_cache, self.prefix, "AFTER")
+    _check_kv_cache_nan(kv_cache, self.prefix, "AFTER")
     return
 
 
