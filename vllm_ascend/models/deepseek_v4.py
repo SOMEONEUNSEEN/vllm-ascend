@@ -23,6 +23,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import logging
 import math
 import typing
 from collections.abc import Callable, Iterable
@@ -36,6 +37,36 @@ from transformers import DeepseekV2Config, DeepseekV3Config
 from vllm._aiter_ops import rocm_aiter_ops
 from vllm.compilation.decorators import support_torch_compile
 from vllm.config import CacheConfig, ParallelConfig, VllmConfig
+
+logger = logging.getLogger(__name__)
+
+
+@torch._dynamo.disable
+def _check_nan_inf(tensor: torch.Tensor, tag: str, layer_idx: int | None = None) -> None:
+    """[diag] Check tensor for NaN/inf without breaking torch.compile graphs.
+
+    Decorated with @torch._dynamo.disable so the data-dependent control flow
+    (isinf/isnan.any()) runs in eager mode and does not break the compiled
+    graph around it.
+    """
+    if tensor is None:
+        return
+    has_nan = torch.isnan(tensor).any().item()
+    has_inf = torch.isinf(tensor).any().item()
+    if not (has_nan or has_inf):
+        return
+    min_v = tensor.min().item() if not has_nan else "NaN"
+    max_v = tensor.max().item() if not has_nan else "NaN"
+    if layer_idx is not None:
+        logger.warning(
+            "[pd_diag] layer[%d] %s has NaN=%s, inf=%s, shape=%s, min=%s, max=%s",
+            layer_idx, tag, has_nan, has_inf, tuple(tensor.shape), min_v, max_v,
+        )
+    else:
+        logger.warning(
+            "[pd_diag] %s has NaN=%s, inf=%s, shape=%s, min=%s, max=%s",
+            tag, has_nan, has_inf, tuple(tensor.shape), min_v, max_v,
+        )
 from vllm.distributed import (
     get_ep_group,
     get_pp_group,
@@ -992,31 +1023,12 @@ class DeepseekV2DecoderLayer(nn.Module):
         attn_kwargs = {"positions": positions, "hidden_states": hidden_states, "llama_4_scaling": llama_4_scaling}
 
         # [diag] Check attention input for NaN (PD disagg debugging)
-        if torch.isnan(hidden_states).any() or torch.isinf(hidden_states).any():
-            import logging
-            logging.getLogger(__name__).warning(
-                "[pd_diag] layer[%d] attn INPUT has NaN=%s, inf=%s, shape=%s",
-                self.layer_idx,
-                torch.isnan(hidden_states).any().item(),
-                torch.isinf(hidden_states).any().item(),
-                hidden_states.shape,
-            )
+        _check_nan_inf(hidden_states, "attn INPUT", self.layer_idx)
 
         hidden_states = self.self_attn(**attn_kwargs)
 
         # [diag] Check attention output for NaN (catches KV cache corruption)
-        if torch.isnan(hidden_states).any() or torch.isinf(hidden_states).any():
-            import logging
-            logging.getLogger(__name__).warning(
-                "[pd_diag] layer[%d] attn OUTPUT has NaN=%s, inf=%s, shape=%s, "
-                "min=%s, max=%s",
-                self.layer_idx,
-                torch.isnan(hidden_states).any().item(),
-                torch.isinf(hidden_states).any().item(),
-                hidden_states.shape,
-                hidden_states.min().item() if not torch.isnan(hidden_states).any() else "NaN",
-                hidden_states.max().item() if not torch.isnan(hidden_states).any() else "NaN",
-            )
+        _check_nan_inf(hidden_states, "attn OUTPUT", self.layer_idx)
 
         hidden_states = self.hc_post(hidden_states, residual, post, comb)
         residual = hidden_states.clone()
@@ -1024,31 +1036,12 @@ class DeepseekV2DecoderLayer(nn.Module):
         hidden_states = self.post_attention_layernorm(hidden_states)
 
         # [diag] Check MoE input for NaN
-        if torch.isnan(hidden_states).any() or torch.isinf(hidden_states).any():
-            import logging
-            logging.getLogger(__name__).warning(
-                "[pd_diag] layer[%d] MoE INPUT has NaN=%s, inf=%s, shape=%s",
-                self.layer_idx,
-                torch.isnan(hidden_states).any().item(),
-                torch.isinf(hidden_states).any().item(),
-                hidden_states.shape,
-            )
+        _check_nan_inf(hidden_states, "MoE INPUT", self.layer_idx)
 
         hidden_states = self.mlp(hidden_states)
 
         # [diag] Check MoE output for NaN (catches W8A8 quant overflow)
-        if torch.isnan(hidden_states).any() or torch.isinf(hidden_states).any():
-            import logging
-            logging.getLogger(__name__).warning(
-                "[pd_diag] layer[%d] MoE OUTPUT has NaN=%s, inf=%s, shape=%s, "
-                "min=%s, max=%s",
-                self.layer_idx,
-                torch.isnan(hidden_states).any().item(),
-                torch.isinf(hidden_states).any().item(),
-                hidden_states.shape,
-                hidden_states.min().item() if not torch.isnan(hidden_states).any() else "NaN",
-                hidden_states.max().item() if not torch.isnan(hidden_states).any() else "NaN",
-            )
+        _check_nan_inf(hidden_states, "MoE OUTPUT", self.layer_idx)
 
         hidden_states = self.hc_post(hidden_states, residual, post, comb)
 
@@ -1189,19 +1182,7 @@ class DeepseekV4Model(nn.Module):
             hidden_states, residual = layer(positions, hidden_states, residual, llama_4_scaling)
 
             # [diag] Check hidden_states for NaN after each layer (PD disagg debugging)
-            if torch.isnan(hidden_states).any() or torch.isinf(hidden_states).any():
-                import logging
-                logging.getLogger(__name__).warning(
-                    "[pd_diag] DeepseekV4Model layer[%d] %s: hidden_states has NaN=%s, inf=%s, "
-                    "shape=%s, min=%s, max=%s",
-                    _layer_idx,
-                    layer.__class__.__name__,
-                    torch.isnan(hidden_states).any().item(),
-                    torch.isinf(hidden_states).any().item(),
-                    hidden_states.shape,
-                    hidden_states.min().item() if not torch.isnan(hidden_states).any() else "NaN",
-                    hidden_states.max().item() if not torch.isnan(hidden_states).any() else "NaN",
-                )
+            _check_nan_inf(hidden_states, f"DeepseekV4Model layer[{_layer_idx}]", None)
             _layer_idx += 1
 
         # Stash pre-hc_head residual for the MTP draft (captured copy_).
@@ -1237,17 +1218,7 @@ class DeepseekV4Model(nn.Module):
         hidden_states = self.norm(hidden_states)
 
         # [diag] Check final hidden_states for NaN (before logits computation)
-        if torch.isnan(hidden_states).any() or torch.isinf(hidden_states).any():
-            import logging
-            logging.getLogger(__name__).warning(
-                "[pd_diag] DeepseekV4Model final hidden_states has NaN=%s, inf=%s, "
-                "shape=%s, min=%s, max=%s",
-                torch.isnan(hidden_states).any().item(),
-                torch.isinf(hidden_states).any().item(),
-                hidden_states.shape,
-                hidden_states.min().item() if not torch.isnan(hidden_states).any() else "NaN",
-                hidden_states.max().item() if not torch.isnan(hidden_states).any() else "NaN",
-            )
+        _check_nan_inf(hidden_states, "DeepseekV4Model final hidden_states", None)
 
         return hidden_states
 
