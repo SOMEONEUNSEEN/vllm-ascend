@@ -23,16 +23,7 @@ from vllm.v1.worker.gpu.spec_decode.rejection_sampler_utils import (
     _compute_cumulative_log_p_kernel,
 )
 from vllm.v1.worker.gpu.spec_decode.rejection_sampler_utils import (
-    _compute_global_logprobs_and_logsumexp as _compute_global_logprobs_and_lse,
-)
-from vllm.v1.worker.gpu.spec_decode.rejection_sampler_utils import (
     _compute_global_logsumexp as _compute_global_lse,
-)
-from vllm.v1.worker.gpu.spec_decode.rejection_sampler_utils import (
-    _compute_global_residual_mass,
-)
-from vllm.v1.worker.gpu.spec_decode.rejection_sampler_utils import (
-    _compute_global_target_argmax,
 )
 from vllm.v1.worker.gpu.spec_decode.rejection_sampler_utils import (
     _compute_local_logits_stats_kernel as _compute_block_stats_kernel,
@@ -43,20 +34,9 @@ from vllm.v1.worker.gpu.spec_decode.rejection_sampler_utils import (
 from vllm.v1.worker.gpu.spec_decode.rejection_sampler_utils import (
     _insert_resampled_kernel,
 )
-
-
-@triton.jit
-def _npu_tl_rand32(seed, offset):
-    """NPU-compatible tl_rand32.
-
-    Upstream's tl_rand32 uses tl.rand (float32), which is NPU-compatible.
-    Clamps to the smallest positive float32 to avoid log(0) downstream.
-    """
-    u = tl.rand(seed, offset)
-    # float32 tiny (smallest positive normal). Avoids log(0) in the rejection
-    # test log_p > log(u) + log_q.
-    u = tl.maximum(u, 1.1754943508e-38)
-    return u
+from vllm.v1.worker.gpu.spec_decode.rejection_sampler_utils import (
+    _rejection_kernel as _upstream_rejection_kernel,
+)
 
 
 @triton.jit
@@ -264,7 +244,7 @@ def _resample_kernel(
 
 
 @triton.jit
-def _npu_rejection_kernel(
+def _probabilistic_rejection_kernel(
     # [num_reqs, num_speculative_steps + 1]
     sampled_ptr,
     sampled_stride,
@@ -308,172 +288,85 @@ def _npu_rejection_kernel(
     seed_ptr,
     # [num_logits]
     pos_ptr,
-    # [num_logits]
-    cumulative_log_p_ptr,
-    # [num_logits, num_blocks]
-    local_residual_mass_ptr,
-    local_residual_mass_stride,
     vocab_num_blocks,
     PADDED_VOCAB_NUM_BLOCKS: tl.constexpr,
     HAS_DRAFT_LOGITS: tl.constexpr,
-    USE_BLOCK_VERIFICATION: tl.constexpr,
 ):
-    """NPU-compatible rejection kernel.
-
-    Adapted from upstream _rejection_kernel with the following NPU changes:
-      - tl_rand32(seed, pos) -> _npu_tl_rand32(seed, pos) (based on tl.rand)
-      - Uses _compute_global_* helpers (imported from upstream) unchanged.
-    Supports both the standard (Leviathan et al., 2023) and block
-    (Sun et al., 2024) verification paths.
-    """
     req_idx = tl.program_id(0)
-    req_state_idx = tl.load(idx_mapping_ptr + req_idx).to(tl.int64)
-    start_idx = tl.load(cu_num_logits_ptr + req_idx).to(tl.int64)
+    req_state_idx = tl.load(idx_mapping_ptr + req_idx)
+    start_idx = tl.load(cu_num_logits_ptr + req_idx)
     end_idx = tl.load(cu_num_logits_ptr + req_idx + 1)
-    num_draft_tokens = end_idx - start_idx - 1
-    seed = tl.load(seed_ptr + req_state_idx)
+    num_tokens = end_idx - start_idx
+    seed = tl.load(seed_ptr + req_state_idx)  # noqa: F841
     temp = tl.load(temp_ptr + req_state_idx).to(tl.float32)
-    is_greedy = temp == 0.0
 
-    accepted_length = tl.zeros((), tl.int64)
+    rejected_step = 0
     target_lse = 0.0
     draft_lse = 0.0
-    verifying = True
-    for i in range(num_draft_tokens):
-        logit_idx = start_idx + i
-        draft_sampled = tl.load(draft_sampled_ptr + logit_idx + 1).to(tl.int64)
-        # -1 is used for placeholder draft token ids that should be rejected.
-        is_valid_draft = draft_sampled >= 0
-        # Avoid possible OOB ptr access.
-        draft_sampled = tl.maximum(0, draft_sampled)
-        if not is_greedy:
-            # A -1 placeholder ends verification. Greedy is excluded because it
-            # stores the target argmax upon first rejection, so it rejects the
-            # placeholder via `accepted` instead.
-            verifying &= is_valid_draft
-
-        if verifying:
-            pos = tl.load(pos_ptr + logit_idx).to(tl.int32)
-            u = _npu_tl_rand32(seed, pos)
-            if is_greedy:
+    accepted = True
+    for i in range(num_tokens - 1):
+        if accepted:
+            logit_idx = start_idx + i
+            draft_sampled = tl.load(draft_sampled_ptr + logit_idx + 1)
+            if temp == 0.0:
                 # Greedy sampling. Accept IFF draft matches target argmax.
-                target_argmax = _compute_global_target_argmax(
+                # NOTE: Target argmax is stored directly so that resampling
+                # can be skipped upon rejection.
+                target_blocks = tl.arange(0, PADDED_VOCAB_NUM_BLOCKS)
+                target_blocks_mask = target_blocks < vocab_num_blocks
+                target_local_max = tl.load(
+                    target_local_max_ptr + logit_idx * target_local_max_stride + target_blocks,
+                    mask=target_blocks_mask,
+                    other=float("-inf"),
+                )
+                max_target_block_idx = tl.argmax(target_local_max, axis=0)
+                target_argmax = tl.load(
+                    target_local_argmax_ptr + logit_idx * target_local_argmax_stride + max_target_block_idx
+                )
+                accepted &= target_argmax == draft_sampled
+                tl.store(sampled_ptr + req_idx * sampled_stride + i, target_argmax)
+            else:
+                target_logit = tl.load(target_logits_ptr + logit_idx * target_logits_stride + draft_sampled).to(
+                    tl.float32
+                )
+                target_lse = _compute_global_lse(
                     target_local_max_ptr,
                     target_local_max_stride,
-                    target_local_argmax_ptr,
-                    target_local_argmax_stride,
+                    target_local_sumexp_ptr,
+                    target_local_sumexp_stride,
                     logit_idx,
                     vocab_num_blocks,
                     PADDED_VOCAB_NUM_BLOCKS,
                 )
-                accepted = target_argmax == draft_sampled
-                accepted &= is_valid_draft
-                verifying = accepted
-                accepted_length += accepted
-                tl.store(
-                    sampled_ptr + req_idx * sampled_stride + i,
-                    draft_sampled if accepted else target_argmax,
-                )
-            elif USE_BLOCK_VERIFICATION:
-                # Block verification (Sun et al., 2024):
-                # https://arxiv.org/abs/2403.10444
-                prefix_joint_ratio = tl.exp(
-                    tl.load(cumulative_log_p_ptr + logit_idx).to(tl.float32)
-                )
-                next_draft_token = tl.load(
-                    draft_sampled_ptr + logit_idx + 2,
-                    mask=i < num_draft_tokens - 1,
-                    other=-1,
-                ).to(tl.int64)
-                if next_draft_token >= 0:
-                    residual_mass = _compute_global_residual_mass(
-                        local_residual_mass_ptr,
-                        local_residual_mass_stride,
-                        prefix_joint_ratio,
-                        target_logits_ptr,
-                        target_logits_stride,
-                        target_local_max_ptr,
-                        target_local_max_stride,
-                        target_local_sumexp_ptr,
-                        target_local_sumexp_stride,
-                        next_draft_token,
-                        logit_idx + 1,
-                        vocab_num_blocks,
-                        PADDED_VOCAB_NUM_BLOCKS,
-                        HAS_DRAFT_LOGITS,
-                    )
-                    denom = residual_mass + 1.0 - prefix_joint_ratio
-                    h = tl.where(denom > 0.0, residual_mass / denom, 1.0)
-                else:
-                    h = prefix_joint_ratio
-                accepted_length = tl.where(u <= h, i + 1, accepted_length)
-                tl.store(sampled_ptr + req_idx * sampled_stride + i, draft_sampled)
-                    else:
-                    # Speculative decoding (Leviathan et al., 2023):
-                    # https://arxiv.org/abs/2211.17192
-                    target_logprob, draft_logprob, target_lse, draft_lse = (
-                            _compute_global_logprobs_and_lse(
-                                draft_sampled,
-                                True,  # mask
-                                logit_idx,
-                                req_state_idx,
-                                i,
-                                temp,
-                                target_logits_ptr,
-                                target_logits_stride,
-                                target_local_max_ptr,
-                                target_local_max_stride,
-                        target_local_sumexp_ptr,
-                        target_local_sumexp_stride,
-                        draft_logits_ptr,
-                        draft_logits_stride_0,
-                        draft_logits_stride_1,
+                target_log_prob = target_logit - target_lse
+                # NPU does not support tl_rand64; always accept the draft token.
+                u = tl.full([], 0.0, dtype=tl.float32)
+                if HAS_DRAFT_LOGITS:
+                    draft_logit = tl.load(
+                        draft_logits_ptr
+                        + req_state_idx * draft_logits_stride_0
+                        + i * draft_logits_stride_1
+                        + draft_sampled
+                    ).to(tl.float32)
+                    draft_lse = _compute_global_lse(
                         draft_local_max_ptr,
                         draft_local_max_stride,
                         draft_local_sumexp_ptr,
                         draft_local_sumexp_stride,
+                        logit_idx,
                         vocab_num_blocks,
                         PADDED_VOCAB_NUM_BLOCKS,
-                        HAS_DRAFT_LOGITS,
                     )
-                )
+                    draft_log_prob = draft_logit - draft_lse
+                else:
+                    # One-hot draft: q(draft_token) = 1, log_q = 0.
+                    draft_log_prob = 0
                 # Probability ratio test: p(x) > u * q(x)
                 # Equivalent log form: log_p(x) > log(u) + log_q(x)
-                accepted = target_logprob > tl.log(u) + draft_logprob
-                verifying = accepted
-                accepted_length += accepted
+                accepted &= target_log_prob > tl.log(u) + draft_log_prob
                 tl.store(sampled_ptr + req_idx * sampled_stride + i, draft_sampled)
-
-    tl.store(rejected_steps_ptr + req_idx, accepted_length)
-    # NPU Triton does not support Python `and`/`not` with scalar tensor
-    # conditions. Split the compile-time guard (USE_BLOCK_VERIFICATION,
-    # a tl.constexpr) from the runtime predicate, and combine the runtime
-    # parts with `&` and `== 0` instead of `and`/`not`.
-    if USE_BLOCK_VERIFICATION:
-        need_lse = (is_greedy == 0) & (accepted_length < num_draft_tokens)
-        if need_lse:
-            # Compute the target and draft log exponential sums for the
-            # rejected token.
-            rejected_idx = start_idx + accepted_length
-            target_lse = _compute_global_lse(
-                target_local_max_ptr,
-                target_local_max_stride,
-                target_local_sumexp_ptr,
-                target_local_sumexp_stride,
-                rejected_idx,
-                vocab_num_blocks,
-                PADDED_VOCAB_NUM_BLOCKS,
-            )
-            if HAS_DRAFT_LOGITS:
-                draft_lse = _compute_global_lse(
-                    draft_local_max_ptr,
-                    draft_local_max_stride,
-                    draft_local_sumexp_ptr,
-                    draft_local_sumexp_stride,
-                    rejected_idx,
-                    vocab_num_blocks,
-                    PADDED_VOCAB_NUM_BLOCKS,
-                )
+            rejected_step += accepted
+    tl.store(rejected_steps_ptr + req_idx, rejected_step)
     tl.store(target_rejected_logsumexp_ptr + req_idx, target_lse)
     tl.store(draft_rejected_logsumexp_ptr + req_idx, draft_lse)
 
@@ -646,42 +539,83 @@ def rejection_sample(
     num_sampled = sampled.new_empty(num_reqs, dtype=torch.int32)
     target_rejected_logsumexp = target_logits.new_empty(num_reqs, dtype=torch.float32)
     draft_rejected_logsumexp = target_logits.new_empty(num_reqs, dtype=torch.float32)
-    _npu_rejection_kernel[(num_reqs,)](
-        sampled,
-        sampled.stride(0),
-        num_sampled,
-        target_rejected_logsumexp,
-        draft_rejected_logsumexp,
-        target_logits,
-        target_logits.stride(0),
-        target_local_argmax,
-        target_local_argmax.stride(0),
-        target_local_max,
-        target_local_max.stride(0),
-        target_local_sumexp,
-        target_local_sumexp.stride(0),
-        draft_sampled,
-        draft_logits,
-        draft_logits.stride(0),
-        draft_logits.stride(1),
-        draft_local_max,
-        draft_local_max.stride(0),
-        draft_local_sumexp,
-        draft_local_sumexp.stride(0),
-        cu_num_logits,
-        idx_mapping,
-        temperature,
-        seed,
-        pos,
-        cumulative_log_p,
-        local_residual_mass,
-        local_residual_mass.stride(0) if local_residual_mass is not None else 0,
-        vocab_num_blocks,
-        PADDED_VOCAB_NUM_BLOCKS=padded_vocab_num_blocks,
-        HAS_DRAFT_LOGITS=has_draft_logits,
-        USE_BLOCK_VERIFICATION=use_block_verification,
-        num_warps=1,
-    )
+    if use_block_verification:
+        # Block verification (Sun et al., 2024): delegate to upstream
+        # _rejection_kernel, which is NPU-compatible (uses tl_rand32 based on
+        # tl.rand — float32 only — and basic tl ops; no tldevice, float64, or
+        # gumbel_block_argmax). SYNTHETIC_MODE is unsupported on NPU.
+        _upstream_rejection_kernel[(num_reqs,)](
+            sampled,
+            sampled.stride(0),
+            num_sampled,
+            target_rejected_logsumexp,
+            draft_rejected_logsumexp,
+            target_logits,
+            target_logits.stride(0),
+            target_local_argmax,
+            target_local_argmax.stride(0),
+            target_local_max,
+            target_local_max.stride(0),
+            target_local_sumexp,
+            target_local_sumexp.stride(0),
+            draft_sampled,
+            draft_logits,
+            draft_logits.stride(0),
+            draft_logits.stride(1),
+            draft_local_max,
+            draft_local_max.stride(0),
+            draft_local_sumexp,
+            draft_local_sumexp.stride(0),
+            cu_num_logits,
+            idx_mapping,
+            temperature,
+            seed,
+            pos,
+            None,  # synthetic_conditional_rates (NPU does not support synthetic mode)
+            cumulative_log_p,
+            local_residual_mass,
+            local_residual_mass.stride(0) if local_residual_mass is not None else 0,
+            vocab_num_blocks,
+            PADDED_VOCAB_NUM_BLOCKS=padded_vocab_num_blocks,
+            HAS_DRAFT_LOGITS=has_draft_logits,
+            SYNTHETIC_MODE=False,
+            USE_BLOCK_VERIFICATION=True,
+            num_warps=1,
+        )
+    else:
+        # Standard rejection sampling (Leviathan et al., 2023): keep the
+        # existing NPU kernel unchanged.
+        _probabilistic_rejection_kernel[(num_reqs,)](
+            sampled,
+            sampled.stride(0),
+            num_sampled,
+            target_rejected_logsumexp,
+            draft_rejected_logsumexp,
+            target_logits,
+            target_logits.stride(0),
+            target_local_argmax,
+            target_local_argmax.stride(0),
+            target_local_max,
+            target_local_max.stride(0),
+            target_local_sumexp,
+            target_local_sumexp.stride(0),
+            draft_sampled,
+            draft_logits,
+            draft_logits.stride(0),
+            draft_logits.stride(1),
+            draft_local_max,
+            draft_local_max.stride(0),
+            draft_local_sumexp,
+            draft_local_sumexp.stride(0),
+            cu_num_logits,
+            idx_mapping,
+            temperature,
+            seed,
+            pos,
+            vocab_num_blocks,
+            PADDED_VOCAB_NUM_BLOCKS=padded_vocab_num_blocks,
+            HAS_DRAFT_LOGITS=has_draft_logits,
+        )
 
     # Resample the rejected/bonus tokens.
     RESAMPLE_BLOCK_SIZE = 1024
