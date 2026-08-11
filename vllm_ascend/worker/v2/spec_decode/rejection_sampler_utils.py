@@ -445,29 +445,35 @@ def _npu_rejection_kernel(
                 tl.store(sampled_ptr + req_idx * sampled_stride + i, draft_sampled)
 
     tl.store(rejected_steps_ptr + req_idx, accepted_length)
-    if USE_BLOCK_VERIFICATION and not is_greedy and accepted_length < num_draft_tokens:
-        # Compute the target and draft log exponential sums for the
-        # rejected token.
-        rejected_idx = start_idx + accepted_length
-        target_lse = _compute_global_lse(
-            target_local_max_ptr,
-            target_local_max_stride,
-            target_local_sumexp_ptr,
-            target_local_sumexp_stride,
-            rejected_idx,
-            vocab_num_blocks,
-            PADDED_VOCAB_NUM_BLOCKS,
-        )
-        if HAS_DRAFT_LOGITS:
-            draft_lse = _compute_global_lse(
-                draft_local_max_ptr,
-                draft_local_max_stride,
-                draft_local_sumexp_ptr,
-                draft_local_sumexp_stride,
+    # NPU Triton does not support Python `and`/`not` with scalar tensor
+    # conditions. Split the compile-time guard (USE_BLOCK_VERIFICATION,
+    # a tl.constexpr) from the runtime predicate, and combine the runtime
+    # parts with `&` and `== 0` instead of `and`/`not`.
+    if USE_BLOCK_VERIFICATION:
+        need_lse = (is_greedy == 0) & (accepted_length < num_draft_tokens)
+        if need_lse:
+            # Compute the target and draft log exponential sums for the
+            # rejected token.
+            rejected_idx = start_idx + accepted_length
+            target_lse = _compute_global_lse(
+                target_local_max_ptr,
+                target_local_max_stride,
+                target_local_sumexp_ptr,
+                target_local_sumexp_stride,
                 rejected_idx,
                 vocab_num_blocks,
                 PADDED_VOCAB_NUM_BLOCKS,
             )
+            if HAS_DRAFT_LOGITS:
+                draft_lse = _compute_global_lse(
+                    draft_local_max_ptr,
+                    draft_local_max_stride,
+                    draft_local_sumexp_ptr,
+                    draft_local_sumexp_stride,
+                    rejected_idx,
+                    vocab_num_blocks,
+                    PADDED_VOCAB_NUM_BLOCKS,
+                )
     tl.store(target_rejected_logsumexp_ptr + req_idx, target_lse)
     tl.store(draft_rejected_logsumexp_ptr + req_idx, draft_lse)
 
