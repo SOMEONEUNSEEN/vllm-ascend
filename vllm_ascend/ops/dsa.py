@@ -196,9 +196,42 @@ def dsa_forward(
 
     kv_cache = _build_kv_cache(self, forward_context)
 
+    # [diag] Check KV cache BEFORE forward for NaN/inf (PD disagg debugging)
+    # This distinguishes KV cache corruption (from transfer) vs computation errors
+    import logging
+    _logger = logging.getLogger(__name__)
+    for _ci, _cache in enumerate(kv_cache):
+        if _cache is not None and isinstance(_cache, torch.Tensor):
+            if torch.isnan(_cache).any() or torch.isinf(_cache).any():
+                _logger.warning(
+                    "[pd_diag] layer[%s] KV cache[%d] BEFORE forward has NaN=%s, inf=%s, "
+                    "shape=%s, dtype=%s",
+                    self.prefix,
+                    _ci,
+                    torch.isnan(_cache).any().item(),
+                    torch.isinf(_cache).any().item(),
+                    _cache.shape,
+                    _cache.dtype,
+                )
+
     self.dsa_attn.impl.forward(
         self.dsa_attn.layer_name, hidden_states, kv_cache, attn_metadata, need_gather_q_kv, output
     )
+
+    # [diag] Check KV cache AFTER forward for NaN/inf (catches write corruption)
+    for _ci, _cache in enumerate(kv_cache):
+        if _cache is not None and isinstance(_cache, torch.Tensor):
+            if torch.isnan(_cache).any() or torch.isinf(_cache).any():
+                _logger.warning(
+                    "[pd_diag] layer[%s] KV cache[%d] AFTER forward has NaN=%s, inf=%s, "
+                    "shape=%s, dtype=%s",
+                    self.prefix,
+                    _ci,
+                    torch.isnan(_cache).any().item(),
+                    torch.isinf(_cache).any().item(),
+                    _cache.shape,
+                    _cache.dtype,
+                )
     return
 
 
