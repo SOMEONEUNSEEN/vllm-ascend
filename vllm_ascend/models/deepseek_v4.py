@@ -1130,8 +1130,25 @@ class DeepseekV4Model(nn.Module):
 
         if get_pp_group().is_first_rank:
             hidden_states = hidden_states.unsqueeze(1).repeat(1, self.hc_mult, 1)  # (b, s, h) -> (b, s, c, h)
+        _layer_idx = self.start_layer
         for layer in islice(self.layers, self.start_layer, self.end_layer):
             hidden_states, residual = layer(positions, hidden_states, residual, llama_4_scaling)
+
+            # [diag] Check hidden_states for NaN after each layer (PD disagg debugging)
+            if torch.isnan(hidden_states).any() or torch.isinf(hidden_states).any():
+                import logging
+                logging.getLogger(__name__).warning(
+                    "[pd_diag] DeepseekV4Model layer[%d] %s: hidden_states has NaN=%s, inf=%s, "
+                    "shape=%s, min=%s, max=%s",
+                    _layer_idx,
+                    layer.__class__.__name__,
+                    torch.isnan(hidden_states).any().item(),
+                    torch.isinf(hidden_states).any().item(),
+                    hidden_states.shape,
+                    hidden_states.min().item() if not torch.isnan(hidden_states).any() else "NaN",
+                    hidden_states.max().item() if not torch.isnan(hidden_states).any() else "NaN",
+                )
+            _layer_idx += 1
 
         # Stash pre-hc_head residual for the MTP draft (captured copy_).
         # When FlashComm1 (sequence parallelism) is enabled, tokens are
@@ -1164,6 +1181,20 @@ class DeepseekV4Model(nn.Module):
         hidden_states = self.hc_head(hidden_states, self.hc_head_fn, self.hc_head_scale, self.hc_head_base)
 
         hidden_states = self.norm(hidden_states)
+
+        # [diag] Check final hidden_states for NaN (before logits computation)
+        if torch.isnan(hidden_states).any() or torch.isinf(hidden_states).any():
+            import logging
+            logging.getLogger(__name__).warning(
+                "[pd_diag] DeepseekV4Model final hidden_states has NaN=%s, inf=%s, "
+                "shape=%s, min=%s, max=%s",
+                torch.isnan(hidden_states).any().item(),
+                torch.isinf(hidden_states).any().item(),
+                hidden_states.shape,
+                hidden_states.min().item() if not torch.isnan(hidden_states).any() else "NaN",
+                hidden_states.max().item() if not torch.isnan(hidden_states).any() else "NaN",
+            )
+
         return hidden_states
 
 
