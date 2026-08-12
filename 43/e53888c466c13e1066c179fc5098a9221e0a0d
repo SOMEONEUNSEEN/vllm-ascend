@@ -1,0 +1,32 @@
+vllm_ascend/sample/rejection_sampler.py
+  s_207112070e54ce::t_950a7193e0b558 218
+  s_207112070e54ce::t_be664086bd224a 219-221
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.2",
+  "base_commit_sha": "43e53888c466c13e1066c179fc5098a9221e0a0d",
+  "prompts": {},
+  "humans": {
+    "h_04e6116ac3276d": {
+      "author": "liyishi <1252651434@qq.com>"
+    }
+  },
+  "sessions": {
+    "s_207112070e54ce": {
+      "agent_id": {
+        "tool": "trae-cue",
+        "id": "ai_tab-icr-92984d3e-0112-40b8-a094-5b9fda6f6750",
+        "model": "default"
+      },
+      "human_author": "liyishi <1252651434@qq.com>",
+      "custom_attributes": {
+        "source_scene": "cue",
+        "tool": "trae-cue",
+        "external_session_id": "icr-92984d3e-0112-40b8-a094-5b9fda6f6750",
+        "client_type": "plugin",
+        "edit_kind": "file_edit"
+      }
+    }
+  }
+}
