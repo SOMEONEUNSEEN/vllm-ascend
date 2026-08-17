@@ -3,10 +3,5 @@
   "schema_version": "authorship/3.0.0",
   "git_ai_version": "1.6.2",
   "base_commit_sha": "f623e58b891e371a5cfcb98c30bdaf8a09d9c811",
-  "prompts": {},
-  "humans": {
-    "h_04e6116ac3276d": {
-      "author": "liyishi <1252651434@qq.com>"
-    }
-  }
+  "prompts": {}
 }
