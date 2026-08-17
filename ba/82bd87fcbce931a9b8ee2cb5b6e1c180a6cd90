@@ -1,14 +1,7 @@
-vllm_ascend/sample/rejection_sampler.py
-  h_04e6116ac3276d 485-512
 ---
 {
   "schema_version": "authorship/3.0.0",
   "git_ai_version": "1.6.2",
   "base_commit_sha": "ba82bd87fcbce931a9b8ee2cb5b6e1c180a6cd90",
-  "prompts": {},
-  "humans": {
-    "h_04e6116ac3276d": {
-      "author": "liyishi <1252651434@qq.com>"
-    }
-  }
+  "prompts": {}
 }
