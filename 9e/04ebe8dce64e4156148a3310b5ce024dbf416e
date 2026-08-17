@@ -1,14 +1,7 @@
-vllm_ascend/spec_decode/llm_base_proposer.py
-  h_04e6116ac3276d 4,1362-1394
 ---
 {
   "schema_version": "authorship/3.0.0",
   "git_ai_version": "1.6.2",
   "base_commit_sha": "9e04ebe8dce64e4156148a3310b5ce024dbf416e",
-  "prompts": {},
-  "humans": {
-    "h_04e6116ac3276d": {
-      "author": "liyishi <1252651434@qq.com>"
-    }
-  }
+  "prompts": {}
 }
