@@ -1,32 +1,7 @@
-vllm_ascend/ops/dsa.py
-  s_9cd47aefc2d005::t_f800acc20c8c0f 22,32-52,223,230
 ---
 {
   "schema_version": "authorship/3.0.0",
   "git_ai_version": "1.6.2",
   "base_commit_sha": "84e652f56c18436d48b074f27e3e57021ff96eb2",
-  "prompts": {},
-  "sessions": {
-    "s_9cd47aefc2d005": {
-      "agent_id": {
-        "tool": "trae",
-        "id": "6a793b5d7cf01c667403e53b",
-        "model": "glm-5.2"
-      },
-      "human_author": "liyishi <1252651434@qq.com>",
-      "custom_attributes": {
-        "runtime_client": "trae-tob-git-ai",
-        "tool_use_id": "6a7acbfce2daf30b13f61b55",
-        "tool_id": "icube:applyChatSnapshotPatch",
-        "tool_type": "builtin",
-        "session_id": "6a793b5d7cf01c667403e53b",
-        "dedupe_key": "6a793b5d7cf01c667403e53b:6a7acbfce2daf30b13f61b55:afterEdit:398fc779",
-        "source_scene": "agent",
-        "operation_id": "6a7acbfce2daf30b13f61b55",
-        "external_session_id": "6a793b5d7cf01c667403e53b",
-        "client_type": "ide",
-        "edit_kind": "file_edit"
-      }
-    }
-  }
+  "prompts": {}
 }
