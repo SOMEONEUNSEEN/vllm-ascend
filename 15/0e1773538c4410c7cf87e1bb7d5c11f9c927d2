@@ -1,0 +1,32 @@
+vllm_ascend/spec_decode/llm_base_proposer.py
+  s_ceef4a51aec037::t_71f491f03b9197 1313-1316
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.2",
+  "base_commit_sha": "150e1773538c4410c7cf87e1bb7d5c11f9c927d2",
+  "prompts": {},
+  "sessions": {
+    "s_ceef4a51aec037": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a6b42747cf01c667403dd0c",
+        "model": "glm-5.2"
+      },
+      "human_author": "liyishi <1252651434@qq.com>",
+      "custom_attributes": {
+        "source_scene": "agent",
+        "tool_type": "builtin",
+        "tool_id": "icube:applyChatSnapshotPatch",
+        "edit_kind": "file_edit",
+        "operation_id": "6a84069ef9b5e4e113cdf3dd",
+        "tool_use_id": "6a84069ef9b5e4e113cdf3dd",
+        "dedupe_key": "6a6b42747cf01c667403dd0c:6a84069ef9b5e4e113cdf3dd:afterEdit:f0c29fae",
+        "client_type": "ide",
+        "external_session_id": "6a6b42747cf01c667403dd0c",
+        "runtime_client": "trae-tob-git-ai",
+        "session_id": "6a6b42747cf01c667403dd0c"
+      }
+    }
+  }
+}
