@@ -1,0 +1,37 @@
+vllm_ascend/worker/v2/spec_decode/rejection_sampler_utils.py
+  s_35547eebdd8427::t_0c4a09e1f82329 274-288,290-293
+  s_35547eebdd8427::t_abb13e8493b095 289
+  s_35547eebdd8427::t_3e5095879da55d 470,474
+  s_35547eebdd8427::t_1e60b99cecb4cb 341-350
+  s_35547eebdd8427::t_9656bfb634b0d5 236-237,241
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.2",
+  "base_commit_sha": "3541c621331daa6bfdf97d4af118a034a0036ae3",
+  "prompts": {},
+  "humans": {
+    "h_04e6116ac3276d": {
+      "author": "liyishi <1252651434@qq.com>"
+    }
+  },
+  "sessions": {
+    "s_35547eebdd8427": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a8bff23e2854a368dffb8b7",
+        "model": "glm-5.3__max"
+      },
+      "human_author": "liyishi <1252651434@qq.com>",
+      "custom_attributes": {
+        "tool_name": "RunCommand",
+        "session_id": "6a8bff23e2854a368dffb8b7",
+        "external_session_id": "6a8bff23e2854a368dffb8b7",
+        "operation_id": "6a8c06ade2854a368dffb9da",
+        "edit_kind": "bash",
+        "tool_use_id": "6a8c06ade2854a368dffb9da",
+        "display_model_name": "GLM-5.3"
+      }
+    }
+  }
+}
