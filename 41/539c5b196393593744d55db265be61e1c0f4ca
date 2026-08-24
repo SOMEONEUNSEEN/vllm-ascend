@@ -1,0 +1,54 @@
+tests/e2e/nightly/single_node/ops/singlecard_ops/triton/test_rejection_sample_v2.py
+  s_b1ad16d99ea9b7::t_7f23754c1c1b95 406,433
+  s_35547eebdd8427::t_50e678d2126a8e 232,242,268,271,275,293,331,354,364,375
+  s_35547eebdd8427::t_6662e5b95f1282 43,74,76,85-86,92,99,101,104-105,107-108,111-112,114-115,121-123,138-231,233-241,243-267,269-270,272-274,276-292,294-330,332-353,355-363,365-374,376-379
+  s_b1ad16d99ea9b7::t_0ad712d9bbbe61 33,71,87,93,98,100,110,113,116,125,136-137,380-405,407-432,434-445
+  s_35547eebdd8427::t_6bcf3db25e446f 6
+  s_b1ad16d99ea9b7::t_0e5edbec23abd8 1-5,7-32,34-42,44-70,72-73,75,77-84,88-91,94-97,102-103,106,109,117-120,124,126-135
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.2",
+  "base_commit_sha": "41539c5b196393593744d55db265be61e1c0f4ca",
+  "prompts": {},
+  "sessions": {
+    "s_35547eebdd8427": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a8bff23e2854a368dffb8b7",
+        "model": "glm-5.3"
+      },
+      "human_author": "liyishi <1252651434@qq.com>",
+      "custom_attributes": {
+        "tool_id": "icube:applyChatSnapshotPatch",
+        "client_type": "ide",
+        "source_scene": "agent",
+        "operation_id": "6a8c33c5e2854a368dffbc7c",
+        "tool_type": "builtin",
+        "edit_kind": "file_edit",
+        "external_session_id": "6a8bff23e2854a368dffb8b7",
+        "runtime_client": "trae-tob-git-ai",
+        "dedupe_key": "6a8bff23e2854a368dffb8b7:6a8c33c5e2854a368dffbc7c:afterEdit:33b71408",
+        "tool_use_id": "6a8c33c5e2854a368dffbc7c",
+        "session_id": "6a8bff23e2854a368dffb8b7"
+      }
+    },
+    "s_b1ad16d99ea9b7": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a8c3779e2854a368dffbc91",
+        "model": "glm-5.3__max"
+      },
+      "human_author": "liyishi <1252651434@qq.com>",
+      "custom_attributes": {
+        "external_session_id": "6a8c3779e2854a368dffbc91",
+        "operation_id": "6a8c39b8e2854a368dffbe28",
+        "edit_kind": "bash",
+        "display_model_name": "GLM-5.3",
+        "tool_use_id": "6a8c39b8e2854a368dffbe28",
+        "session_id": "6a8c3779e2854a368dffbc91",
+        "tool_name": "RunCommand"
+      }
+    }
+  }
+}
