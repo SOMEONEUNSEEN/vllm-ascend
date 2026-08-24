@@ -1,0 +1,42 @@
+vllm_ascend/spec_decode/llm_base_proposer.py
+  s_ceef4a51aec037::t_7fa8cf09998303 1175-1177
+vllm_ascend/spec_decode/dflash2_proposer.py
+  s_ceef4a51aec037::t_59a80db2f9e08b 6
+  s_ceef4a51aec037::t_eb55b41bf0112e 82-88,107
+tests/ut/spec_decode/test_dflash2_proposer.py
+  s_ceef4a51aec037::t_adaddaf58f5e77 219,221
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.2",
+  "base_commit_sha": "82b5c7a76148ba03cfbbe11dff41647d91d8c132",
+  "prompts": {},
+  "humans": {
+    "h_04e6116ac3276d": {
+      "author": "liyishi <1252651434@qq.com>"
+    }
+  },
+  "sessions": {
+    "s_ceef4a51aec037": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a6b42747cf01c667403dd0c",
+        "model": "glm-5.3"
+      },
+      "human_author": "liyishi <1252651434@qq.com>",
+      "custom_attributes": {
+        "session_id": "6a6b42747cf01c667403dd0c",
+        "external_session_id": "6a6b42747cf01c667403dd0c",
+        "source_scene": "agent",
+        "operation_id": "6a8c2870e2854a368dffbba7",
+        "dedupe_key": "6a6b42747cf01c667403dd0c:6a8c2870e2854a368dffbba7:afterEdit:0b8ddeb4",
+        "tool_id": "icube:applyChatSnapshotPatch",
+        "edit_kind": "file_edit",
+        "tool_type": "builtin",
+        "client_type": "ide",
+        "tool_use_id": "6a8c2870e2854a368dffbba7",
+        "runtime_client": "trae-tob-git-ai"
+      }
+    }
+  }
+}
