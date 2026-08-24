@@ -1,0 +1,32 @@
+vllm_ascend/worker/v2/spec_decode/rejection_sampler_utils.py
+  s_35547eebdd8427::t_e987a583038636 54-57
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.2",
+  "base_commit_sha": "aa2d546f59bf11f9bc8b1702f69134e7c96820b9",
+  "prompts": {},
+  "sessions": {
+    "s_35547eebdd8427": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a8bff23e2854a368dffb8b7",
+        "model": "glm-5.3"
+      },
+      "human_author": "liyishi <1252651434@qq.com>",
+      "custom_attributes": {
+        "tool_type": "builtin",
+        "runtime_client": "trae-tob-git-ai",
+        "tool_id": "icube:applyChatSnapshotPatch",
+        "operation_id": "6a8c33c5e2854a368dffbc7c",
+        "client_type": "ide",
+        "external_session_id": "6a8bff23e2854a368dffb8b7",
+        "dedupe_key": "6a8bff23e2854a368dffb8b7:6a8c33c5e2854a368dffbc7c:afterEdit:33b71408",
+        "source_scene": "agent",
+        "session_id": "6a8bff23e2854a368dffb8b7",
+        "edit_kind": "file_edit",
+        "tool_use_id": "6a8c33c5e2854a368dffbc7c"
+      }
+    }
+  }
+}
