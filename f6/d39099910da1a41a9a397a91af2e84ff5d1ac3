@@ -1,0 +1,33 @@
+tests/ut/sample/a2/test_gumbel_sampling.py
+  s_b1ad16d99ea9b7::t_3daccaca89944b 581,599,629
+  s_b1ad16d99ea9b7::t_1e4a8594632f8f 316-318,335,341-342,344,349,368,377,381-382,409,415-416,419,428-429,457-458,464-465,475-477,479,503,509-510,513
+  s_b1ad16d99ea9b7::t_213cb09f12613f 568-580,582-598,600-628
+vllm_ascend/worker/v2/sample/gumbel.py
+  s_b1ad16d99ea9b7::t_0bec177981dadf 83-84,95-99,127-133,135,137,146-149,181-182,187-188,190-195,210,216-219
+  s_b1ad16d99ea9b7::t_3daccaca89944b 141
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.2",
+  "base_commit_sha": "f6d39099910da1a41a9a397a91af2e84ff5d1ac3",
+  "prompts": {},
+  "sessions": {
+    "s_b1ad16d99ea9b7": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a8c3779e2854a368dffbc91",
+        "model": "glm-5.3__max"
+      },
+      "human_author": "liyishi <1252651434@qq.com>",
+      "custom_attributes": {
+        "edit_kind": "bash",
+        "external_session_id": "6a8c3779e2854a368dffbc91",
+        "display_model_name": "GLM-5.3",
+        "tool_name": "RunCommand",
+        "operation_id": "6a8cf908e2854a368dffbe97",
+        "session_id": "6a8c3779e2854a368dffbc91",
+        "tool_use_id": "6a8cf908e2854a368dffbe97"
+      }
+    }
+  }
+}
