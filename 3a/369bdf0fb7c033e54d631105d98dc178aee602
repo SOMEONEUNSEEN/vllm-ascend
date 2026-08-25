@@ -1,0 +1,29 @@
+tests/e2e/nightly/single_node/ops/singlecard_ops/triton/test_rejection_sample_v2.py
+  s_b1ad16d99ea9b7::t_795a2b1a2338f6 526
+  s_b1ad16d99ea9b7::t_ef21c29f745f5a 489-525
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.2",
+  "base_commit_sha": "3a369bdf0fb7c033e54d631105d98dc178aee602",
+  "prompts": {},
+  "sessions": {
+    "s_b1ad16d99ea9b7": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a8c3779e2854a368dffbc91",
+        "model": "glm-5.3__max"
+      },
+      "human_author": "liyishi <1252651434@qq.com>",
+      "custom_attributes": {
+        "tool_use_id": "6a8d032be2854a368dffbed7",
+        "external_session_id": "6a8c3779e2854a368dffbc91",
+        "session_id": "6a8c3779e2854a368dffbc91",
+        "operation_id": "6a8d032be2854a368dffbed7",
+        "tool_name": "RunCommand",
+        "display_model_name": "GLM-5.3",
+        "edit_kind": "bash"
+      }
+    }
+  }
+}
