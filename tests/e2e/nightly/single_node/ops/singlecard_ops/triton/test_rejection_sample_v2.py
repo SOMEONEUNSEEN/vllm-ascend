@@ -134,3 +134,46 @@ def test_synthetic_rejection_sample(
 
     gc.collect()
     torch.npu.empty_cache()
+
+
+@pytest.mark.parametrize("use_block_verification", [False])
+@torch.inference_mode()
+def test_placeholder_blocks_later_draft_tokens(use_block_verification: bool):
+    """A placeholder is not necessarily the final draft. Nothing at or after
+    one may be accepted, even when a valid draft follows it.
+    """
+    torch.manual_seed(0)
+    device = "npu"
+    num_trials = 4 * VOCAB_SIZE
+    K = 3
+    temperature = 1.0
+
+    # An identical draft is accepted with probability ~1, so any token after
+    # the placeholder would be accepted unless it is explicitly blocked. The
+    # draft logits are stored pre-temperature, so pass the unscaled base.
+    draft_logits_1d = torch.randn(VOCAB_SIZE, device=device)
+    target_logits_1d = draft_logits_1d / temperature
+
+    inputs = _build_rejection_sample_inputs(
+        target_logits_1d,
+        draft_logits_1d,
+        K,
+        temperature=temperature,
+        num_trials=num_trials,
+    )
+    inputs["draft_sampled"].view(num_trials, K + 1)[:, 2] = -1
+
+    _, num_sampled = rejection_sample(
+        **inputs,
+        num_speculative_steps=K,
+        use_block_verification=use_block_verification,
+    )
+
+    # Only the first draft is verifiable, plus one resampled token.
+    assert (num_sampled <= 2).all(), "Accepted a draft token past a placeholder."
+    assert (num_sampled == 2).float().mean().item() > 0.9, (
+        "The first draft was rarely accepted; the test is not exercising acceptance past the placeholder."
+    )
+
+    gc.collect()
+    torch.npu.empty_cache()
