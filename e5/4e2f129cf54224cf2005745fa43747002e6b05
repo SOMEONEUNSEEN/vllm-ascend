@@ -1,0 +1,31 @@
+vllm_ascend/worker/v2/spec_decode/rejection_sampler_utils.py
+  s_b1ad16d99ea9b7::t_3c5e82c3c0b243 556-559
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.2",
+  "base_commit_sha": "e54e2f129cf54224cf2005745fa43747002e6b05",
+  "prompts": {},
+  "sessions": {
+    "s_b1ad16d99ea9b7": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a8c3779e2854a368dffbc91",
+        "model": "glm-5.3__dev"
+      },
+      "human_author": "liyishi <1252651434@qq.com>",
+      "custom_attributes": {
+        "source_scene": "agent",
+        "client_type": "ide",
+        "runtime_client": "trae-tob-git-ai",
+        "external_session_id": "6a8c3779e2854a368dffbc91",
+        "tool_use_id": "6a97ca46f2097460b572ce46",
+        "display_model_name": "GLM-5.3",
+        "session_id": "6a8c3779e2854a368dffbc91",
+        "tool_name": "RunCommand",
+        "edit_kind": "bash",
+        "operation_id": "6a97ca46f2097460b572ce46"
+      }
+    }
+  }
+}
