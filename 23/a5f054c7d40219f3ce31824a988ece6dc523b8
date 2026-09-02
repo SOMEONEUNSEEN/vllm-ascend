@@ -1,0 +1,31 @@
+vllm_ascend/worker/v2/sample/gumbel.py
+  s_b1ad16d99ea9b7::t_7b3c0f175f28a6 33,109,111
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.2",
+  "base_commit_sha": "23a5f054c7d40219f3ce31824a988ece6dc523b8",
+  "prompts": {},
+  "sessions": {
+    "s_b1ad16d99ea9b7": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a8c3779e2854a368dffbc91",
+        "model": "glm-5.3__dev"
+      },
+      "human_author": "liyishi <1252651434@qq.com>",
+      "custom_attributes": {
+        "tool_use_id": "6a97e8ddf2097460b572d2a5",
+        "external_session_id": "6a8c3779e2854a368dffbc91",
+        "runtime_client": "trae-tob-git-ai",
+        "source_scene": "agent",
+        "session_id": "6a8c3779e2854a368dffbc91",
+        "client_type": "ide",
+        "edit_kind": "bash",
+        "tool_name": "RunCommand",
+        "display_model_name": "GLM-5.3",
+        "operation_id": "6a97e8ddf2097460b572d2a5"
+      }
+    }
+  }
+}
