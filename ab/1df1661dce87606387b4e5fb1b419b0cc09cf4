@@ -1,0 +1,34 @@
+vllm_ascend/worker/v2/spec_decode/rejection_sampler_utils.py
+  s_b1ad16d99ea9b7::t_7b3c0f175f28a6 49-53,124,127,248-249
+vllm_ascend/worker/v2/sample/gumbel.py
+  s_b1ad16d99ea9b7::t_7b3c0f175f28a6 33,109,111
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.2",
+  "base_commit_sha": "ab1df1661dce87606387b4e5fb1b419b0cc09cf4",
+  "prompts": {},
+  "sessions": {
+    "s_b1ad16d99ea9b7": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a8c3779e2854a368dffbc91",
+        "model": "glm-5.3__dev"
+      },
+      "human_author": "liyishi <1252651434@qq.com>",
+      "custom_attributes": {
+        "tool_use_id": "6a97dab8f2097460b572d1e2",
+        "dedupe_key": "6a8c3779e2854a368dffbc91:6a97dab8f2097460b572d1e2:afterEdit:5f6a3e40",
+        "runtime_client": "trae-tob-git-ai",
+        "source_scene": "unknown",
+        "tool_type": "agent",
+        "edit_kind": "file_edit",
+        "tool_id": "Write",
+        "session_id": "6a8c3779e2854a368dffbc91",
+        "operation_id": "6a97dab8f2097460b572d1e2",
+        "external_session_id": "6a8c3779e2854a368dffbc91",
+        "client_type": "ide"
+      }
+    }
+  }
+}
