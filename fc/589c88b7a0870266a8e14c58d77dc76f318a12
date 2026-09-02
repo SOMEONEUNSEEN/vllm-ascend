@@ -1,0 +1,44 @@
+tests/e2e/nightly/single_node/ops/singlecard_ops/triton/test_rejection_sample_v2.py
+  s_b1ad16d99ea9b7::t_6a89a44b109cbf 74-129
+  s_b1ad16d99ea9b7::t_14d714faa71612 196
+  s_b1ad16d99ea9b7::t_f50c75aa4fd4a5 237-417
+  s_b1ad16d99ea9b7::t_2db858735cd0d3 6
+vllm_ascend/worker/v2/spec_decode/rejection_sampler_utils.py
+  s_b1ad16d99ea9b7::t_3e4620a8037259 702
+  s_b1ad16d99ea9b7::t_95b21f4b33b0d8 23-28,31,34,123-124,128,140-141,144-151,162-165,168-176,180-188,208-214,294-298,303,309-310,312,314,317-343,347-354,359,361-396,398-400,402-411,416-422,425,432,436,439-440,442-468,552-625,661-663,668,698
+  s_b1ad16d99ea9b7::t_6110f9d421665d 152,397,626
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.2",
+  "base_commit_sha": "fc589c88b7a0870266a8e14c58d77dc76f318a12",
+  "prompts": {},
+  "humans": {
+    "h_04e6116ac3276d": {
+      "author": "liyishi <1252651434@qq.com>"
+    }
+  },
+  "sessions": {
+    "s_b1ad16d99ea9b7": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a8c3779e2854a368dffbc91",
+        "model": "glm-5.3__dev"
+      },
+      "human_author": "liyishi <1252651434@qq.com>",
+      "custom_attributes": {
+        "edit_kind": "file_edit",
+        "tool_id": "Write",
+        "tool_use_id": "6a97e175f2097460b572d288",
+        "session_id": "6a8c3779e2854a368dffbc91",
+        "dedupe_key": "6a8c3779e2854a368dffbc91:6a97e175f2097460b572d288:afterEdit:5f6a3e40",
+        "tool_type": "agent",
+        "client_type": "ide",
+        "external_session_id": "6a8c3779e2854a368dffbc91",
+        "operation_id": "6a97e175f2097460b572d288",
+        "source_scene": "unknown",
+        "runtime_client": "trae-tob-git-ai"
+      }
+    }
+  }
+}
