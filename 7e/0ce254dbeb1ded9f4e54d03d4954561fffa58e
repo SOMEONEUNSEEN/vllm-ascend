@@ -1,0 +1,66 @@
+tests/e2e/nightly/single_node/ops/singlecard_ops/triton/test_rejection_sample_v2.py
+  s_94dbff887560da::t_9f4ba893477460 101-109,121-145,147
+  s_e9b7fef9e83ca8::t_8515b7dcd490a3 6
+  s_e9b7fef9e83ca8::t_b0f52be789d9bf 157-613
+vllm_ascend/worker/v2/spec_decode/rejection_sampler_utils.py
+  s_e9b7fef9e83ca8::t_d88b2d7e05742c 63-68
+  s_e9b7fef9e83ca8::t_22bc628e8a1e77 23-28,31,34,95-97,104-108,110-115,118,158-159,163,175-176,179-187,197-200,203-211,215-223,225-230,232-236,239,243-249,265-268,270,272,332-336,341,347-348,350,352,355-381,385-392,397,399-438,440-449,454-460,463,470,474-478,480-506,541-543,593-667
+  s_e9b7fef9e83ca8::t_53e29f9df87344 60-62
+  s_e9b7fef9e83ca8::t_c0b86c1a34d2b9 69-71
+  s_e9b7fef9e83ca8::t_4fa7347ebdf56d 92-94
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.2",
+  "base_commit_sha": "7e0ce254dbeb1ded9f4e54d03d4954561fffa58e",
+  "prompts": {},
+  "humans": {
+    "h_04e6116ac3276d": {
+      "author": "liyishi <1252651434@qq.com>"
+    }
+  },
+  "sessions": {
+    "s_94dbff887560da": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a97d4d6f2097460b572cedd",
+        "model": "glm-5.3__dev"
+      },
+      "human_author": "liyishi <1252651434@qq.com>",
+      "custom_attributes": {
+        "external_session_id": "6a97d4d6f2097460b572cedd",
+        "operation_id": "6a98d7de75edfb7cf07a8562",
+        "tool_id": "Write",
+        "source_scene": "unknown",
+        "client_type": "ide",
+        "tool_use_id": "6a98d7de75edfb7cf07a8562",
+        "session_id": "6a97d4d6f2097460b572cedd",
+        "dedupe_key": "6a97d4d6f2097460b572cedd:6a98d7de75edfb7cf07a8562:afterEdit:16ca1237",
+        "edit_kind": "file_edit",
+        "runtime_client": "trae-tob-git-ai",
+        "tool_type": "agent"
+      }
+    },
+    "s_e9b7fef9e83ca8": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a98e3ba75edfb7cf07a85e0",
+        "model": "glm-5.3__dev"
+      },
+      "human_author": "liyishi <1252651434@qq.com>",
+      "custom_attributes": {
+        "session_id": "6a98e3ba75edfb7cf07a85e0",
+        "runtime_client": "trae-tob-git-ai",
+        "source_scene": "unknown",
+        "tool_use_id": "6a993d0775edfb7cf07a8b1e",
+        "edit_kind": "file_edit",
+        "client_type": "ide",
+        "external_session_id": "6a98e3ba75edfb7cf07a85e0",
+        "operation_id": "6a993d0775edfb7cf07a8b1e",
+        "tool_type": "agent",
+        "dedupe_key": "6a98e3ba75edfb7cf07a85e0:6a993d0775edfb7cf07a8b1e:afterEdit:a7b7d6b5",
+        "tool_id": "Write"
+      }
+    }
+  }
+}
