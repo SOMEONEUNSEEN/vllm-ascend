@@ -1,0 +1,37 @@
+tests/e2e/nightly/single_node/ops/singlecard_ops/triton/test_resample.py
+  s_e9b7fef9e83ca8::t_be75db3b582697 145-148,152
+vllm_ascend/ops/triton/docs/resample.md
+  s_e9b7fef9e83ca8::t_9f502411d8a389 121,125
+  s_e9b7fef9e83ca8::t_3c74d5dfd7be26 143-146,148,150-151
+  s_e9b7fef9e83ca8::t_b9507e5f3dff63 29-39
+  s_e9b7fef9e83ca8::t_9531835e94f48d 95
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.2",
+  "base_commit_sha": "4f226027afe75093083af9113275a1a142cd5a9c",
+  "prompts": {},
+  "sessions": {
+    "s_e9b7fef9e83ca8": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a98e3ba75edfb7cf07a85e0",
+        "model": "glm-5.3__dev"
+      },
+      "human_author": "liyishi <1252651434@qq.com>",
+      "custom_attributes": {
+        "edit_kind": "file_edit",
+        "operation_id": "6a9940de75edfb7cf07a8b9b",
+        "tool_type": "agent",
+        "client_type": "ide",
+        "tool_use_id": "6a9940de75edfb7cf07a8b9b",
+        "dedupe_key": "6a98e3ba75edfb7cf07a85e0:6a9940de75edfb7cf07a8b9b:afterEdit:b159c284",
+        "source_scene": "unknown",
+        "external_session_id": "6a98e3ba75edfb7cf07a85e0",
+        "tool_id": "Write",
+        "session_id": "6a98e3ba75edfb7cf07a85e0",
+        "runtime_client": "trae-tob-git-ai"
+      }
+    }
+  }
+}
