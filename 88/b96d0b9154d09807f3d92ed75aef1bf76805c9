@@ -1,0 +1,31 @@
+tests/e2e/nightly/single_node/ops/singlecard_ops/triton/test_rejection_sample_v2.py
+  s_94dbff887560da::t_9f4ba893477460 100-108,120-144,146
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.2",
+  "base_commit_sha": "88b96d0b9154d09807f3d92ed75aef1bf76805c9",
+  "prompts": {},
+  "sessions": {
+    "s_94dbff887560da": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a97d4d6f2097460b572cedd",
+        "model": "glm-5.3__dev"
+      },
+      "human_author": "liyishi <1252651434@qq.com>",
+      "custom_attributes": {
+        "tool_use_id": "6a98e06c75edfb7cf07a8595",
+        "operation_id": "6a98e06c75edfb7cf07a8595",
+        "session_id": "6a97d4d6f2097460b572cedd",
+        "tool_name": "RunCommand",
+        "edit_kind": "bash",
+        "display_model_name": "GLM-5.3",
+        "runtime_client": "trae-tob-git-ai",
+        "external_session_id": "6a97d4d6f2097460b572cedd",
+        "source_scene": "agent",
+        "client_type": "ide"
+      }
+    }
+  }
+}
