@@ -1,0 +1,32 @@
+tests/e2e/nightly/single_node/ops/singlecard_ops/triton/test_rejection_sample_v2.py
+  s_94dbff887560da::t_fe4f2b606e167d 100-104
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.2",
+  "base_commit_sha": "bfaa32adf7bbef7cbf3c13dd7c6a5a995eb06eb5",
+  "prompts": {},
+  "sessions": {
+    "s_94dbff887560da": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a97d4d6f2097460b572cedd",
+        "model": "glm-5.3__dev"
+      },
+      "human_author": "liyishi <1252651434@qq.com>",
+      "custom_attributes": {
+        "tool_use_id": "6a98d7de75edfb7cf07a8562",
+        "runtime_client": "trae-tob-git-ai",
+        "external_session_id": "6a97d4d6f2097460b572cedd",
+        "operation_id": "6a98d7de75edfb7cf07a8562",
+        "source_scene": "unknown",
+        "session_id": "6a97d4d6f2097460b572cedd",
+        "edit_kind": "file_edit",
+        "tool_type": "agent",
+        "dedupe_key": "6a97d4d6f2097460b572cedd:6a98d7de75edfb7cf07a8562:afterEdit:16ca1237",
+        "tool_id": "Write",
+        "client_type": "ide"
+      }
+    }
+  }
+}
