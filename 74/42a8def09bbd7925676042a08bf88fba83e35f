@@ -1,0 +1,32 @@
+vllm_ascend/worker/v2/spec_decode/rejection_sampler_utils.py
+  s_e9b7fef9e83ca8::t_878065c35a1259 390-393
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.2",
+  "base_commit_sha": "7442a8def09bbd7925676042a08bf88fba83e35f",
+  "prompts": {},
+  "sessions": {
+    "s_e9b7fef9e83ca8": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a98e3ba75edfb7cf07a85e0",
+        "model": "glm-5.3__dev"
+      },
+      "human_author": "liyishi <1252651434@qq.com>",
+      "custom_attributes": {
+        "external_session_id": "6a98e3ba75edfb7cf07a85e0",
+        "tool_id": "Edit",
+        "runtime_client": "trae-tob-git-ai",
+        "source_scene": "unknown",
+        "client_type": "ide",
+        "operation_id": "6a99123b75edfb7cf07a8946",
+        "dedupe_key": "6a98e3ba75edfb7cf07a85e0:6a99123b75edfb7cf07a8946:afterEdit:33b71408",
+        "session_id": "6a98e3ba75edfb7cf07a85e0",
+        "tool_type": "agent",
+        "tool_use_id": "6a99123b75edfb7cf07a8946",
+        "edit_kind": "file_edit"
+      }
+    }
+  }
+}
