@@ -1,0 +1,32 @@
+docs/design/mrv2_rejection_sampler_perf.md
+  s_c16c34e286d673::t_b1ae93e1ce39ab 1-283
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.2",
+  "base_commit_sha": "9a9093f90e459862854ae4ed52b74993504413db",
+  "prompts": {},
+  "sessions": {
+    "s_c16c34e286d673": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a9bbacd75edfb7cf07a9249",
+        "model": "kimi-k3__max"
+      },
+      "human_author": "liyishi <1252651434@qq.com>",
+      "custom_attributes": {
+        "tool_type": "agent",
+        "dedupe_key": "6a9bbacd75edfb7cf07a9249:6a9bc23b75edfb7cf07a92b5:afterEdit:81685fc7",
+        "source_scene": "unknown",
+        "external_session_id": "6a9bbacd75edfb7cf07a9249",
+        "client_type": "ide",
+        "operation_id": "6a9bc23b75edfb7cf07a92b5",
+        "runtime_client": "trae-tob-git-ai",
+        "edit_kind": "file_edit",
+        "tool_id": "Write",
+        "tool_use_id": "6a9bc23b75edfb7cf07a92b5",
+        "session_id": "6a9bbacd75edfb7cf07a9249"
+      }
+    }
+  }
+}
