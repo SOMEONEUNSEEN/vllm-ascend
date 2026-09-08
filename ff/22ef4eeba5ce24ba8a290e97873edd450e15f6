@@ -11,10 +11,14 @@ vllm_ascend/ops/triton/v2/spec_decode/resample.py
   s_f0c801e2c3f1ae::t_95f3756e4fdeb3 420
 tests/e2e/nightly/single_node/ops/singlecard_ops/triton/test_rejection_sample_v2.py
   s_f0c801e2c3f1ae::t_de607bf3bbec3a 6,157-613
+  s_94dbff887560da::t_9f4ba893477460 101-109,121-145,147
+  s_e9b7fef9e83ca8::t_8515b7dcd490a3 6
+  s_e9b7fef9e83ca8::t_b0f52be789d9bf 157-613
 vllm_ascend/worker/v2/spec_decode/rejection_sampler_utils.py
   s_f0c801e2c3f1ae::t_de607bf3bbec3a 22-28,85-89,94,100-101,103,105,108-134,138-145,150,152-191,193-202,207-213,216,223,227-231,233-259,294-296,346-420,455-457,462
   s_f0c801e2c3f1ae::t_d043feda8e67b8 481-482
   s_f0c801e2c3f1ae::t_29d65a353742df 1
+  s_e9b7fef9e83ca8::t_22bc628e8a1e77 23-27,30,33,85-89,94,100-101,103,105,108-134,138-145,150,152-191,193-202,207-213,216,223,227-231,233-259,294-296,346-420
 ---
 {
   "schema_version": "authorship/3.0.0",
@@ -27,6 +31,48 @@ vllm_ascend/worker/v2/spec_decode/rejection_sampler_utils.py
     }
   },
   "sessions": {
+    "s_94dbff887560da": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a97d4d6f2097460b572cedd",
+        "model": "glm-5.3__dev"
+      },
+      "human_author": "liyishi <1252651434@qq.com>",
+      "custom_attributes": {
+        "tool_id": "Write",
+        "operation_id": "6a98d7de75edfb7cf07a8562",
+        "source_scene": "unknown",
+        "dedupe_key": "6a97d4d6f2097460b572cedd:6a98d7de75edfb7cf07a8562:afterEdit:16ca1237",
+        "tool_type": "agent",
+        "external_session_id": "6a97d4d6f2097460b572cedd",
+        "edit_kind": "file_edit",
+        "tool_use_id": "6a98d7de75edfb7cf07a8562",
+        "session_id": "6a97d4d6f2097460b572cedd",
+        "client_type": "ide",
+        "runtime_client": "trae-tob-git-ai"
+      }
+    },
+    "s_e9b7fef9e83ca8": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a98e3ba75edfb7cf07a85e0",
+        "model": "glm-5.3__dev"
+      },
+      "human_author": "liyishi <1252651434@qq.com>",
+      "custom_attributes": {
+        "operation_id": "6a993d0775edfb7cf07a8b1e",
+        "external_session_id": "6a98e3ba75edfb7cf07a85e0",
+        "edit_kind": "file_edit",
+        "tool_id": "Write",
+        "tool_use_id": "6a993d0775edfb7cf07a8b1e",
+        "dedupe_key": "6a98e3ba75edfb7cf07a85e0:6a993d0775edfb7cf07a8b1e:afterEdit:a7b7d6b5",
+        "runtime_client": "trae-tob-git-ai",
+        "client_type": "ide",
+        "session_id": "6a98e3ba75edfb7cf07a85e0",
+        "tool_type": "agent",
+        "source_scene": "unknown"
+      }
+    },
     "s_f0c801e2c3f1ae": {
       "agent_id": {
         "tool": "trae",
@@ -35,16 +81,16 @@ vllm_ascend/worker/v2/spec_decode/rejection_sampler_utils.py
       },
       "human_author": "liyishi <1252651434@qq.com>",
       "custom_attributes": {
+        "display_model_name": "GLM-5.3",
+        "external_session_id": "6a9a2b3475edfb7cf07a8e1f",
+        "operation_id": "6a9fb00775edfb7cf07a950c",
+        "client_type": "ide",
         "tool_name": "Edit",
         "runtime_client": "trae-tob-git-ai",
-        "session_id": "6a9a2b3475edfb7cf07a8e1f",
         "source_scene": "agent",
-        "display_model_name": "GLM-5.3",
-        "operation_id": "6a9fb00775edfb7cf07a950c",
         "edit_kind": "file_edit",
-        "external_session_id": "6a9a2b3475edfb7cf07a8e1f",
-        "tool_use_id": "6a9fb00775edfb7cf07a950c",
-        "client_type": "ide"
+        "session_id": "6a9a2b3475edfb7cf07a8e1f",
+        "tool_use_id": "6a9fb00775edfb7cf07a950c"
       }
     }
   }
