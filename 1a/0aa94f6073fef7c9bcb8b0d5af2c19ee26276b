@@ -21,17 +21,17 @@ vllm_ascend/ops/triton/docs/v2/spec_decode/resample.md
       },
       "human_author": "liyishi <1252651434@qq.com>",
       "custom_attributes": {
+        "session_id": "6a9a2b3475edfb7cf07a8e1f",
+        "operation_id": "6a9fb64a75edfb7cf07a99c0",
+        "tool_type": "agent",
+        "dedupe_key": "6a9a2b3475edfb7cf07a8e1f:6a9fb64a75edfb7cf07a99c0:afterEdit:4c3dc294",
+        "tool_id": "Edit",
+        "source_scene": "unknown",
+        "client_type": "ide",
         "external_session_id": "6a9a2b3475edfb7cf07a8e1f",
         "edit_kind": "file_edit",
-        "source_scene": "unknown",
-        "operation_id": "6a9fb64a75edfb7cf07a99c0",
-        "dedupe_key": "6a9a2b3475edfb7cf07a8e1f:6a9fb64a75edfb7cf07a99c0:afterEdit:4c3dc294",
-        "client_type": "ide",
         "tool_use_id": "6a9fb64a75edfb7cf07a99c0",
-        "tool_id": "Edit",
-        "tool_type": "agent",
-        "runtime_client": "trae-tob-git-ai",
-        "session_id": "6a9a2b3475edfb7cf07a8e1f"
+        "runtime_client": "trae-tob-git-ai"
       }
     }
   }
