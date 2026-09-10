@@ -4,8 +4,9 @@ vllm_ascend/ops/triton/reject_sample.py
   s_b5a6c64b0c35e8::t_78a64e232ecfc1 379-384
   s_b5a6c64b0c35e8::t_130085a7e98951 417-424
 tests/e2e/nightly/single_node/ops/singlecard_ops/triton/test_rejection_sample.py
-  s_b5a6c64b0c35e8::t_9c6ff391c0225d 360-641
+  s_b5a6c64b0c35e8::t_9c6ff391c0225d 360-641,360-440,442-443,446-641
   s_b5a6c64b0c35e8::t_ab2eb73a4944d3 642-643
+  s_b5a6c64b0c35e8::t_77093d73f6de06 642-643
 ---
 {
   "schema_version": "authorship/3.0.0",
@@ -27,15 +28,15 @@ tests/e2e/nightly/single_node/ops/singlecard_ops/triton/test_rejection_sample.py
       "human_author": "liyishi <1252651434@qq.com>",
       "custom_attributes": {
         "edit_kind": "bash",
-        "session_id": "6aa224ec75edfb7cf07aa235",
-        "tool_name": "RunCommand",
         "tool_use_id": "6aa22b9f75edfb7cf07aa2e9",
-        "display_model_name": "GLM-5.3",
         "external_session_id": "6aa224ec75edfb7cf07aa235",
         "client_type": "ide",
-        "source_scene": "agent",
+        "operation_id": "6aa22b9f75edfb7cf07aa2e9",
+        "tool_name": "RunCommand",
         "runtime_client": "trae-tob-git-ai",
-        "operation_id": "6aa22b9f75edfb7cf07aa2e9"
+        "session_id": "6aa224ec75edfb7cf07aa235",
+        "display_model_name": "GLM-5.3",
+        "source_scene": "agent"
       }
     }
   }
