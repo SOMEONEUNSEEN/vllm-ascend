@@ -15,17 +15,17 @@ vllm_ascend/worker/v2/spec_decode/rejection_sampler_utils.py
       },
       "human_author": "liyishi <1252651434@qq.com>",
       "custom_attributes": {
-        "dedupe_key": "6a98e3ba75edfb7cf07a85e0:6a99123b75edfb7cf07a8946:afterEdit:33b71408",
-        "session_id": "6a98e3ba75edfb7cf07a85e0",
-        "tool_use_id": "6a99123b75edfb7cf07a8946",
         "operation_id": "6a99123b75edfb7cf07a8946",
-        "client_type": "ide",
-        "external_session_id": "6a98e3ba75edfb7cf07a85e0",
-        "tool_id": "Edit",
-        "edit_kind": "file_edit",
+        "dedupe_key": "6a98e3ba75edfb7cf07a85e0:6a99123b75edfb7cf07a8946:afterEdit:33b71408",
+        "source_scene": "unknown",
         "runtime_client": "trae-tob-git-ai",
+        "tool_use_id": "6a99123b75edfb7cf07a8946",
+        "tool_id": "Edit",
         "tool_type": "agent",
-        "source_scene": "unknown"
+        "session_id": "6a98e3ba75edfb7cf07a85e0",
+        "external_session_id": "6a98e3ba75edfb7cf07a85e0",
+        "client_type": "ide",
+        "edit_kind": "file_edit"
       }
     }
   }

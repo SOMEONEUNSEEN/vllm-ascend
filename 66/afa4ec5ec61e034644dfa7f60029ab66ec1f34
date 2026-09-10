@@ -20,14 +20,14 @@ vllm_ascend/worker/v2/spec_decode/rejection_sampler_utils.py
       },
       "human_author": "liyishi <1252651434@qq.com>",
       "custom_attributes": {
-        "edit_kind": "file_edit",
-        "tool_name": "Edit",
         "display_model_name": "GLM-5.3",
-        "operation_id": "6a99121475edfb7cf07a893d",
         "client_type": "ide",
+        "tool_name": "Edit",
         "tool_use_id": "6a99121475edfb7cf07a893d",
-        "external_session_id": "6a98e3ba75edfb7cf07a85e0",
+        "operation_id": "6a99121475edfb7cf07a893d",
         "session_id": "6a98e3ba75edfb7cf07a85e0",
+        "external_session_id": "6a98e3ba75edfb7cf07a85e0",
+        "edit_kind": "file_edit",
         "source_scene": "agent",
         "runtime_client": "trae-tob-git-ai"
       }
