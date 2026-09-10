@@ -1,0 +1,21 @@
+vllm_ascend/worker/v2/sample/gumbel.py
+  s_a966f1a9bfd1c8::t_3799a42667cfdc 33,109,111
+vllm_ascend/worker/v2/spec_decode/rejection_sampler_utils.py
+  s_a966f1a9bfd1c8::t_6c3ad6d28c993d 49,120,123,244-245
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.2",
+  "base_commit_sha": "bec11489da64e75deb58ef17761e7272edb1317f",
+  "prompts": {},
+  "sessions": {
+    "s_a966f1a9bfd1c8": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a9fb5fe75edfb7cf07a9533",
+        "model": "glm-5.3__max"
+      },
+      "human_author": "liyishi <1252651434@qq.com>"
+    }
+  }
+}
