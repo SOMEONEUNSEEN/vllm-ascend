@@ -1,7 +1,21 @@
+vllm_ascend/spec_decode/llm_base_proposer.py
+  s_a966f1a9bfd1c8::t_5beb2c59978823 220-233,1054,1067-1103,1107-1110,1116,1119,1131,1133-1139,1198,1201-1203,1212-1213,1229,1239-1254,1261,1266-1281,1303,1332,1433,1436-1438,1442-1443,1454,1460,1465-1469,1473-1474
+vllm_ascend/worker/model_runner_v1.py
+  s_a966f1a9bfd1c8::t_053d826d0f223b 1466-1470,1668,2465
 ---
 {
   "schema_version": "authorship/3.0.0",
   "git_ai_version": "1.6.2",
   "base_commit_sha": "afe3f0a9a1d4a9e0b72f371611591d12ac0ca5f5",
-  "prompts": {}
+  "prompts": {},
+  "sessions": {
+    "s_a966f1a9bfd1c8": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a9fb5fe75edfb7cf07a9533",
+        "model": "glm-5.3__max"
+      },
+      "human_author": "liyishi <1252651434@qq.com>"
+    }
+  }
 }
