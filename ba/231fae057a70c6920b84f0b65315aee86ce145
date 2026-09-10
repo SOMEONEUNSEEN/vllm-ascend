@@ -1,0 +1,37 @@
+tests/e2e/nightly/single_node/ops/singlecard_ops/triton/test_rejection_sample.py
+  s_b5a6c64b0c35e8::t_114bbe15857b86 441-442,445-446
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.2",
+  "base_commit_sha": "ba231fae057a70c6920b84f0b65315aee86ce145",
+  "prompts": {},
+  "humans": {
+    "h_04e6116ac3276d": {
+      "author": "liyishi <1252651434@qq.com>"
+    }
+  },
+  "sessions": {
+    "s_b5a6c64b0c35e8": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6aa224ec75edfb7cf07aa235",
+        "model": "glm-5.3__max"
+      },
+      "human_author": "liyishi <1252651434@qq.com>",
+      "custom_attributes": {
+        "operation_id": "6aa2546475edfb7cf07aa360",
+        "edit_kind": "file_edit",
+        "external_session_id": "6aa224ec75edfb7cf07aa235",
+        "tool_id": "Edit",
+        "source_scene": "unknown",
+        "session_id": "6aa224ec75edfb7cf07aa235",
+        "tool_type": "agent",
+        "dedupe_key": "6aa224ec75edfb7cf07aa235:6aa2546475edfb7cf07aa360:afterEdit:dc3e9231",
+        "client_type": "ide",
+        "runtime_client": "trae-tob-git-ai",
+        "tool_use_id": "6aa2546475edfb7cf07aa360"
+      }
+    }
+  }
+}
