@@ -1,0 +1,19 @@
+vllm_ascend/spec_decode/llm_base_proposer.py
+  s_a966f1a9bfd1c8::t_36f1cc6f538225 1242,1311-1314
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.2",
+  "base_commit_sha": "09c5fbbd1a33ae1e30178269484572d4806602e2",
+  "prompts": {},
+  "sessions": {
+    "s_a966f1a9bfd1c8": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a9fb5fe75edfb7cf07a9533",
+        "model": "glm-5.3__max"
+      },
+      "human_author": "liyishi <1252651434@qq.com>"
+    }
+  }
+}
