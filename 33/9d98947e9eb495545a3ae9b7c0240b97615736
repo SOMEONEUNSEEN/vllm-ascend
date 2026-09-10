@@ -18,17 +18,17 @@ docs/source/user_guide/feature_guide/speculative_decoding.md
       },
       "human_author": "liyishi <1252651434@qq.com>",
       "custom_attributes": {
-        "edit_kind": "file_edit",
-        "tool_type": "agent",
-        "session_id": "6a98e3ba75edfb7cf07a85e0",
-        "source_scene": "unknown",
-        "tool_id": "Edit",
         "tool_use_id": "6a9965f075edfb7cf07a8ca5",
         "operation_id": "6a9965f075edfb7cf07a8ca5",
+        "runtime_client": "trae-tob-git-ai",
+        "source_scene": "unknown",
+        "session_id": "6a98e3ba75edfb7cf07a85e0",
+        "tool_id": "Edit",
+        "tool_type": "agent",
         "client_type": "ide",
         "dedupe_key": "6a98e3ba75edfb7cf07a85e0:6a9965f075edfb7cf07a8ca5:afterEdit:30dee42e",
-        "runtime_client": "trae-tob-git-ai",
-        "external_session_id": "6a98e3ba75edfb7cf07a85e0"
+        "external_session_id": "6a98e3ba75edfb7cf07a85e0",
+        "edit_kind": "file_edit"
       }
     }
   }

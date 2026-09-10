@@ -1,7 +1,62 @@
+tests/e2e/nightly/single_node/ops/singlecard_ops/triton/test_rejection_sample_v2.py
+  s_94dbff887560da::t_9f4ba893477460 101-109,121-145,147
+  s_e9b7fef9e83ca8::t_8515b7dcd490a3 6
+  s_e9b7fef9e83ca8::t_b0f52be789d9bf 157-158,276-730
+vllm_ascend/worker/v2/spec_decode/rejection_sampler_utils.py
+  s_e9b7fef9e83ca8::t_22bc628e8a1e77 23-27,30,33,85-89,94,103-104,106,108,111-137,141-148,153,155-194,196-205,210-216,219,226,230-234,236-262,297-299,353-427
 ---
 {
   "schema_version": "authorship/3.0.0",
   "git_ai_version": "1.6.2",
   "base_commit_sha": "41c65c88de845856c3775ae42e9c9677d4daadf6",
-  "prompts": {}
+  "prompts": {},
+  "humans": {
+    "h_04e6116ac3276d": {
+      "author": "liyishi <1252651434@qq.com>"
+    }
+  },
+  "sessions": {
+    "s_94dbff887560da": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a97d4d6f2097460b572cedd",
+        "model": "glm-5.3__dev"
+      },
+      "human_author": "liyishi <1252651434@qq.com>",
+      "custom_attributes": {
+        "runtime_client": "trae-tob-git-ai",
+        "dedupe_key": "6a97d4d6f2097460b572cedd:6a98d7de75edfb7cf07a8562:afterEdit:16ca1237",
+        "external_session_id": "6a97d4d6f2097460b572cedd",
+        "tool_id": "Write",
+        "tool_use_id": "6a98d7de75edfb7cf07a8562",
+        "edit_kind": "file_edit",
+        "session_id": "6a97d4d6f2097460b572cedd",
+        "tool_type": "agent",
+        "source_scene": "unknown",
+        "client_type": "ide",
+        "operation_id": "6a98d7de75edfb7cf07a8562"
+      }
+    },
+    "s_e9b7fef9e83ca8": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a98e3ba75edfb7cf07a85e0",
+        "model": "glm-5.3__dev"
+      },
+      "human_author": "liyishi <1252651434@qq.com>",
+      "custom_attributes": {
+        "session_id": "6a98e3ba75edfb7cf07a85e0",
+        "client_type": "ide",
+        "tool_type": "agent",
+        "operation_id": "6a993d0775edfb7cf07a8b1e",
+        "source_scene": "unknown",
+        "external_session_id": "6a98e3ba75edfb7cf07a85e0",
+        "edit_kind": "file_edit",
+        "tool_use_id": "6a993d0775edfb7cf07a8b1e",
+        "runtime_client": "trae-tob-git-ai",
+        "tool_id": "Write",
+        "dedupe_key": "6a98e3ba75edfb7cf07a85e0:6a993d0775edfb7cf07a8b1e:afterEdit:a7b7d6b5"
+      }
+    }
+  }
 }
