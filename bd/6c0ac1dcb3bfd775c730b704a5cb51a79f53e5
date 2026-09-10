@@ -1,0 +1,42 @@
+tests/e2e/nightly/single_node/ops/singlecard_ops/triton/test_rejection_sample.py
+  s_b5a6c64b0c35e8::t_9c6ff391c0225d 360-642
+  s_b5a6c64b0c35e8::t_77093d73f6de06 643-644
+vllm_ascend/ops/triton/reject_sample.py
+  s_b5a6c64b0c35e8::t_78a64e232ecfc1 379-384
+  s_b5a6c64b0c35e8::t_b68d5ed6947610 211-215
+  s_b5a6c64b0c35e8::t_130085a7e98951 417-424
+  s_b5a6c64b0c35e8::t_feb96ef4543a95 111-117
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.2",
+  "base_commit_sha": "bd6c0ac1dcb3bfd775c730b704a5cb51a79f53e5",
+  "prompts": {},
+  "humans": {
+    "h_04e6116ac3276d": {
+      "author": "liyishi <1252651434@qq.com>"
+    }
+  },
+  "sessions": {
+    "s_b5a6c64b0c35e8": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6aa224ec75edfb7cf07aa235",
+        "model": "glm-5.3__max"
+      },
+      "human_author": "liyishi <1252651434@qq.com>",
+      "custom_attributes": {
+        "session_id": "6aa224ec75edfb7cf07aa235",
+        "external_session_id": "6aa224ec75edfb7cf07aa235",
+        "runtime_client": "trae-tob-git-ai",
+        "tool_name": "RunCommand",
+        "client_type": "ide",
+        "operation_id": "6aa22b9f75edfb7cf07aa2e9",
+        "display_model_name": "GLM-5.3",
+        "source_scene": "agent",
+        "edit_kind": "bash",
+        "tool_use_id": "6aa22b9f75edfb7cf07aa2e9"
+      }
+    }
+  }
+}
