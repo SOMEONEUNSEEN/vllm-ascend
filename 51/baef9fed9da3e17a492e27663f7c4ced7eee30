@@ -1,7 +1,19 @@
+vllm_ascend/worker/v2/spec_decode/rejection_sampler_utils.py
+  s_a966f1a9bfd1c8::t_ebc8e218b466e3 22-27,31-36,40-42,48-61,143-144,148,152,155,160-161,164-170,180-183,186-197,201-211,213-218,220,223,227-233,267,311-315,319,321-328,330-331,333-334,336,338,341-358,360,363-364,369-430,437,439,442-444,446-470,512-517,564-636,643,670-672,676,706,710
 ---
 {
   "schema_version": "authorship/3.0.0",
   "git_ai_version": "1.6.2",
   "base_commit_sha": "51baef9fed9da3e17a492e27663f7c4ced7eee30",
-  "prompts": {}
+  "prompts": {},
+  "sessions": {
+    "s_a966f1a9bfd1c8": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a9fb5fe75edfb7cf07a9533",
+        "model": "glm-5.3__max"
+      },
+      "human_author": "liyishi <1252651434@qq.com>"
+    }
+  }
 }
