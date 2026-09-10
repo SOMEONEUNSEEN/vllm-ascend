@@ -28,17 +28,17 @@ vllm_ascend/worker/v2/spec_decode/rejection_sampler_utils.py
       },
       "human_author": "liyishi <1252651434@qq.com>",
       "custom_attributes": {
-        "external_session_id": "6a97d4d6f2097460b572cedd",
         "operation_id": "6a98d7de75edfb7cf07a8562",
-        "tool_id": "Write",
-        "source_scene": "unknown",
-        "client_type": "ide",
-        "tool_use_id": "6a98d7de75edfb7cf07a8562",
-        "session_id": "6a97d4d6f2097460b572cedd",
         "dedupe_key": "6a97d4d6f2097460b572cedd:6a98d7de75edfb7cf07a8562:afterEdit:16ca1237",
-        "edit_kind": "file_edit",
+        "tool_id": "Write",
+        "client_type": "ide",
         "runtime_client": "trae-tob-git-ai",
-        "tool_type": "agent"
+        "tool_use_id": "6a98d7de75edfb7cf07a8562",
+        "edit_kind": "file_edit",
+        "external_session_id": "6a97d4d6f2097460b572cedd",
+        "session_id": "6a97d4d6f2097460b572cedd",
+        "tool_type": "agent",
+        "source_scene": "unknown"
       }
     },
     "s_e9b7fef9e83ca8": {
@@ -49,17 +49,17 @@ vllm_ascend/worker/v2/spec_decode/rejection_sampler_utils.py
       },
       "human_author": "liyishi <1252651434@qq.com>",
       "custom_attributes": {
-        "session_id": "6a98e3ba75edfb7cf07a85e0",
-        "runtime_client": "trae-tob-git-ai",
-        "source_scene": "unknown",
-        "tool_use_id": "6a993d0775edfb7cf07a8b1e",
         "edit_kind": "file_edit",
-        "client_type": "ide",
-        "external_session_id": "6a98e3ba75edfb7cf07a85e0",
-        "operation_id": "6a993d0775edfb7cf07a8b1e",
-        "tool_type": "agent",
         "dedupe_key": "6a98e3ba75edfb7cf07a85e0:6a993d0775edfb7cf07a8b1e:afterEdit:a7b7d6b5",
-        "tool_id": "Write"
+        "runtime_client": "trae-tob-git-ai",
+        "tool_use_id": "6a993d0775edfb7cf07a8b1e",
+        "session_id": "6a98e3ba75edfb7cf07a85e0",
+        "source_scene": "unknown",
+        "tool_id": "Write",
+        "tool_type": "agent",
+        "client_type": "ide",
+        "operation_id": "6a993d0775edfb7cf07a8b1e",
+        "external_session_id": "6a98e3ba75edfb7cf07a85e0"
       }
     }
   }
