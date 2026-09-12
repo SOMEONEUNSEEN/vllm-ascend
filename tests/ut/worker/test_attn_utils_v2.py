@@ -1,4 +1,4 @@
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import MagicMock
@@ -684,6 +684,66 @@ def test_v41_prepare_source_rope_initializes_cache_without_async_tasks(monkeypat
     assert builder._c2_full_source_rope is rope
     # Synchronous mode: runner V2 must not enable async device tasks.
     assert builder._device_metadata_enabled is False
+
+
+def test_v41_publish_task_runs_inline_on_default_stream(monkeypatch):
+    from vllm_ascend.attention import dsa_v41
+    from vllm_ascend.core.deepseek_v41 import DeepseekV41SWASpec
+
+    spec = DeepseekV41SWASpec(
+        block_size=64,
+        num_kv_heads=1,
+        head_size=64,
+        dtype=torch.bfloat16,
+        sliding_window=128,
+        cache_dtype_str="bfloat16",
+        model_version="deepseek_v4",
+    )
+    vllm_config = SimpleNamespace(
+        scheduler_config=SimpleNamespace(max_num_batched_tokens=8, max_num_seqs=4),
+        model_config=SimpleNamespace(hf_text_config=SimpleNamespace(sliding_window=128, qk_rope_head_dim=16)),
+    )
+    # device.type "npu" makes the builder take the device-ops routing branch.
+    builder = dsa_v41.DeepseekV41MetadataBuilder(
+        spec,
+        ["model.layers.3.self_attn.swa_cache"],
+        vllm_config,
+        torch.device("npu"),
+    )
+    assert builder._supports_device_ops is True
+
+    buffer = torch.zeros(4)
+    executed_on = []
+    sync_calls = []
+
+    def run():
+        executed_on.append(torch.npu.current_stream())
+
+    default_stream = MagicMock()
+    side_stream = MagicMock()
+    monkeypatch.setattr(torch.npu, "default_stream", lambda: default_stream)
+    monkeypatch.setattr(torch.npu, "synchronize", lambda: sync_calls.append("sync"))
+    monkeypatch.setattr(torch.npu, "stream", lambda _s: nullcontext())
+
+    # Current stream is the default: execute inline, no synchronization.
+    monkeypatch.setattr(torch.npu, "current_stream", lambda: default_stream)
+    builder._publish_task({}, "k", buffer, dsa_v41.DeviceMetadataStage.ATTENTION, run)
+    assert executed_on == [default_stream]
+    assert sync_calls == []
+
+    # A new shared key (new capture descriptor) executes on the unregistered
+    # side stream: route to the default stream with a device fence.
+    monkeypatch.setattr(torch.npu, "current_stream", lambda: side_stream)
+    builder._publish_task({}, "k2", buffer, dsa_v41.DeviceMetadataStage.ATTENTION, run)
+    assert executed_on == [default_stream, default_stream]
+    assert sync_calls == ["sync"]
+    side_stream.wait_stream.assert_called_once_with(default_stream)
+    side_stream.wait_stream.reset_mock()
+
+    # An already-published key just reuses the buffer without re-running.
+    assert builder._publish_task({}, "k2", buffer, dsa_v41.DeviceMetadataStage.ATTENTION, run) is buffer
+    assert len(executed_on) == 2
+    side_stream.wait_stream.assert_not_called()
 
 
 def _make_v41_runtime(monkeypatch):

@@ -17,6 +17,7 @@ from torch import nn
 from vllm.compilation.breakable_cudagraph import eager_break_during_capture
 from vllm.config import VllmConfig
 from vllm.forward_context import get_forward_context
+from vllm.logger import logger
 from vllm.model_executor.layers.attention_layer_base import AttentionLayerBase
 from vllm.utils.torch_utils import direct_register_custom_op
 from vllm.v1.attention.backend import (
@@ -715,9 +716,44 @@ class DeepseekV41MetadataBuilder(AttentionMetadataBuilder[DeepseekV41Metadata]):
                 *self._device_metadata_tasks,
                 DeviceMetadataTask(stage, run, id(buffer)),
             )
+        elif self._supports_device_ops:
+            self._run_task_on_registered_stream(run)
         else:
             run()
         return buffer
+
+    def _run_task_on_registered_stream(self, run) -> None:
+        """Execute inline AICPU metadata kernels on the default stream.
+
+        AICPU kernels allocate their outputs through the current stream's
+        registered CANN allocator (aclrtAllocatorGetByStream). Streams that
+        vLLM creates for graph capture (FULL decode, PIECEWISE, draft graphs)
+        are never registered, so launching there fails silently at submission
+        time; the poisoned task then aborts the whole context at the next
+        synchronize, taking down unrelated kernels (507018 cascade). Runner
+        V1 never hits this because its DeviceMetadataExecutor always runs
+        metadata tasks on a dedicated worker-owned stream. Runner V2 runs
+        them inline, so route to the always-registered default stream
+        whenever the caller is on any non-default stream.
+        """
+        default_stream = torch.npu.default_stream()
+        current_stream = torch.npu.current_stream()
+        if current_stream == default_stream:
+            run()
+            return
+        logger.warning_once(
+            "V4.1 metadata AICPU kernels routed from unregistered stream %s "
+            "to the default stream (allocator registration)",
+            current_stream,
+        )
+        # Fence pending reads of the shared metadata buffers (e.g. the
+        # previous capture descriptor's kernels), then run on the default
+        # stream and order the caller's stream behind the writes.
+        torch.npu.synchronize()
+        default_stream.wait_stream(current_stream)
+        with torch.npu.stream(default_stream):
+            run()
+        current_stream.wait_stream(default_stream)
 
     def _build_batch_metadata(self, common, num_reqs, num_actual_reqs, num_input_tokens):
         self._seq_lens[:num_reqs].copy_(common.seq_lens[:num_reqs])
