@@ -331,7 +331,7 @@ def test_model_registration_and_binding(runtime):
     assert len(owned_names) == 51
 
 
-@pytest.mark.parametrize("feature", ["spec", "pd", "pp", "v2", "graph"])
+@pytest.mark.parametrize("feature", ["spec", "pd", "pp", "graph"])
 def test_unsupported_runtime_fails_before_registration(runtime, feature):
     if feature == "spec":
         runtime.speculative_config = object()
@@ -339,8 +339,6 @@ def test_unsupported_runtime_fails_before_registration(runtime, feature):
         runtime.kv_transfer_config = object()
     elif feature == "pp":
         runtime.parallel_config.pipeline_parallel_size = 2
-    elif feature == "v2":
-        runtime.use_v2_model_runner = True
     else:
         runtime.model_config.enforce_eager = False
     with pytest.raises(NotImplementedError):
@@ -348,6 +346,13 @@ def test_unsupported_runtime_fails_before_registration(runtime, feature):
 
         validate_cache_runtime(runtime)
     assert not runtime.compilation_config.static_forward_context
+
+
+def test_v2_model_runner_runtime_is_supported(runtime):
+    from vllm_ascend.core.deepseek_v41 import validate_cache_runtime
+
+    runtime.use_v2_model_runner = True
+    validate_cache_runtime(runtime)
 
 
 def test_prefix_cache_runtime_is_supported(runtime):

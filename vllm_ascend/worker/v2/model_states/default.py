@@ -94,5 +94,7 @@ class AscendModelState(DefaultModelState):
             attn_state=input_batch.attn_state,
             pcp_context=pcp_context,
             for_cudagraph_capture=for_capture,
+            # V4.1 builders pick graph-friendly vs eager metadata paths.
+            full_graph_mode=cudagraph_mode == CUDAGraphMode.FULL,
         )
         return self.attn_metadata

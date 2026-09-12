@@ -311,8 +311,9 @@ def reshape_cache(raw: torch.Tensor, spec, *, num_blocks, offset, block_stride):
 
 
 def validate_cache_runtime(vllm_config):
-    if vllm_config.use_v2_model_runner:
-        raise NotImplementedError("V4.1 cache initialization currently requires model runner V1")
+    # Model runner V2 routes V4.1 cache allocation/reshape through the
+    # Ascend attn_utils patch (v2 worker path); both runners share the same
+    # slot-planning contract in plan_cache_slots/allocate_cache_config.
     cudagraph_mode = getattr(
         vllm_config.compilation_config,
         "cudagraph_mode",

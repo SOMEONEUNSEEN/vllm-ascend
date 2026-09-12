@@ -52,6 +52,7 @@ from vllm_ascend.ascend_forward_context import (
     set_mc2_mask,
     set_mc2_tokens_capacity,
 )
+from vllm_ascend.core.circular_buffer import is_circular_spec
 from vllm_ascend.core.profiling_chunk_predictor import (
     _finish_profiling_chunk_timing,
     _start_profiling_chunk_timing,
@@ -101,6 +102,52 @@ def _use_ascend_pcp_manager_for_vllm_0271():
         yield
     finally:
         pcp_module.PCPManager = original_pcp_manager_cls
+
+
+_V41_MODEL_TYPES = ("deepseek_v4.1", "deepseek_v41")
+_V41_TEXT_MODEL_TYPES = ("deepseek_v4.1_text", "deepseek_v41_text")
+
+
+def _is_deepseek_v41_model(vllm_config: VllmConfig) -> bool:
+    hf_model_type = getattr(vllm_config.model_config.hf_config, "model_type", None)
+    hf_text_model_type = getattr(vllm_config.model_config.hf_text_config, "model_type", None)
+    return hf_model_type in _V41_MODEL_TYPES or hf_text_model_type in _V41_TEXT_MODEL_TYPES
+
+
+_V41_EAGER_FALLBACK_INSTALLED = False
+
+
+def _install_v41_eager_fallback() -> None:
+    """Route V4.1 runtime-NONE steps around the compiled model wrapper.
+
+    V4.1's Python reference compressor/indexer path is correctness-safe in
+    eager mode, while only uniform decode is prepared for a full ACL graph.
+    FULL_DECODE_ONLY dispatches prefills and unsupported decode shapes as
+    runtime NONE; upstream's ``skip_compiled`` only covers encoder-decoder
+    steps, so patch the module-level ``set_forward_context`` consumed by
+    ``GPUModelRunner.execute_model`` to force eager for those V4.1 calls.
+    The wrapper checks the model type on every call, so non-V4.1 runners
+    sharing this process are unaffected.
+    """
+    global _V41_EAGER_FALLBACK_INSTALLED
+    if _V41_EAGER_FALLBACK_INSTALLED:
+        return
+    original_set_forward_context = vllm_model_runner.set_forward_context
+
+    @contextmanager
+    def v41_aware_set_forward_context(*args, **kwargs):
+        vllm_config = args[1] if len(args) > 1 else kwargs.get("vllm_config")
+        if (
+            vllm_config is not None
+            and _is_deepseek_v41_model(vllm_config)
+            and kwargs.get("cudagraph_runtime_mode", CUDAGraphMode.NONE) == CUDAGraphMode.NONE
+        ):
+            kwargs["skip_compiled"] = True
+        with original_set_forward_context(*args, **kwargs):
+            yield
+
+    vllm_model_runner.set_forward_context = v41_aware_set_forward_context
+    _V41_EAGER_FALLBACK_INSTALLED = True
 
 
 class NPUModelRunner(GPUModelRunner):
@@ -209,6 +256,9 @@ class NPUModelRunner(GPUModelRunner):
         set_mc2_tokens_capacity(vllm_config, self.max_num_reqs, self.decode_query_len)
         set_mc2_mask(vllm_config, self.device)
         set_potential_max_tokens(vllm_config)
+        # V4.1: runtime-NONE steps (prefill, non-uniform decode) must bypass
+        # the compiled wrapper; only uniform decode runs the full ACL graph.
+        _install_v41_eager_fallback()
 
     @property
     def pcp_manager_cls(self) -> type[AscendPCPManager]:
@@ -271,8 +321,48 @@ class NPUModelRunner(GPUModelRunner):
                 self.model_state.pcp_manager = self.pcp_manager
                 if self.speculator is not None:
                     self.speculator.pcp_manager = self.pcp_manager
+        if any(is_circular_spec(group.kv_cache_spec) for group in self.kv_cache_config.kv_cache_groups):
+            # V4.1 ratio-2 ring compressors must be prepared (persistent
+            # buffer validation + Triton core resolution) before any graph
+            # capture. Lazy import avoids the model/cache registration cycle.
+            from vllm_ascend.models.deepseek_v41.compressor import DeepseekV41Compressor
+
+            for module in self.model.modules():
+                if isinstance(module, DeepseekV41Compressor) and module.ratio == 2:
+                    module.prepare_ring_compressor(self.max_num_tokens, self.device)
         if self.model_config.enable_return_routed_experts:
             self.init_routed_experts_capturer()
+
+    def prepare_dummy_attn(
+        self,
+        input_batch: AscendInputBatch,
+    ) -> tuple[tuple[torch.Tensor, ...], torch.Tensor]:
+        """Override GPUModelRunner.prepare_dummy_attn for Ascend NPUs.
+
+        V4.1's compressor ring state owns one private page per request.
+        Upstream zero-fills dummy block tables, which would alias every
+        dummy request onto page 0; assign distinct live state IDs
+        1..num_reqs and zero those ring pages so graph capture/replay see
+        a clean ring instead of stale or aliased state.
+        """
+        block_tables, slot_mappings = super().prepare_dummy_attn(input_batch)
+        num_reqs = input_batch.num_reqs
+        for gid, group in enumerate(self.kv_cache_config.kv_cache_groups):
+            if not is_circular_spec(group.kv_cache_spec):
+                continue
+            if num_reqs >= self.kv_cache_config.num_blocks:
+                raise ValueError("Insufficient ring pages for dummy graph requests")
+            block_table = self.block_tables.input_block_tables[gid]
+            block_table[:num_reqs, 0] = torch.arange(
+                1,
+                num_reqs + 1,
+                dtype=block_table.dtype,
+                device=block_table.device,
+            )
+            forward_context = self.compilation_config.static_forward_context
+            for name in group.layer_names:
+                forward_context[name].kv_cache[0][1 : num_reqs + 1].zero_()
+        return block_tables, slot_mappings
 
     @torch.inference_mode()
     def execute_model(

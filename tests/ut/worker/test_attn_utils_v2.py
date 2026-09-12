@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import MagicMock
@@ -13,8 +14,10 @@ from vllm.v1.kv_cache_interface import (
     KVCacheTensor,
 )
 from vllm.v1.worker.gpu import attn_utils as upstream_attn_utils
+from vllm.v1.worker.gpu import model_runner as vllm_model_runner
 from vllm.v1.worker.utils import AttentionGroup
 
+from tests.deepseek_v41_cache_utils import allocate_cache_views, make_cache_config
 from vllm_ascend.attention import dsa_v1
 from vllm_ascend.attention.dsa_v1 import (
     AscendDSAC4Backend,
@@ -23,6 +26,11 @@ from vllm_ascend.attention.dsa_v1 import (
     AscendDSAC128StateBackend,
     AscendDSAMetadataBuilder,
     AscendDSASWABackend,
+)
+from vllm_ascend.attention.dsa_v41 import (
+    DeepseekV41CacheBackend,
+    DeepseekV41CacheLayer,
+    DeepseekV41MetadataBuilder,
 )
 from vllm_ascend.core.kv_cache_interface import (
     AscendMLAAttentionSpec,
@@ -529,3 +537,223 @@ def test_build_attn_metadata_propagates_prefill_state():
     )
 
     assert metadata["layer.0"] is is_prefilling
+
+
+class _RecordingV41MetadataBuilder(DeepseekV41MetadataBuilder):
+    def __init__(self, calls: list[dict[str, Any]]):
+        self.calls = calls
+        self.for_cudagraph_capture = False
+
+    def build_for_cudagraph_capture(
+        self,
+        common_attn_metadata,
+        **kwargs,
+    ):
+        self.for_cudagraph_capture = True
+        return super().build_for_cudagraph_capture(common_attn_metadata, **kwargs)
+
+    def build(
+        self,
+        common_prefix_len: int,
+        common_attn_metadata,
+        fast_build: bool = False,
+        **kwargs,
+    ):
+        del common_prefix_len, fast_build
+        self.calls.append(
+            {
+                "common_attn_metadata": common_attn_metadata,
+                "for_cudagraph_capture": self.for_cudagraph_capture,
+                **kwargs,
+            }
+        )
+        return SimpleNamespace(common_attn_metadata=common_attn_metadata)
+
+
+@pytest.mark.parametrize("for_capture", [False, True])
+def test_build_attn_metadata_injects_v41_shared_dicts_across_groups(for_capture):
+    calls: list[dict[str, Any]] = []
+    attn_groups = [
+        [
+            AttentionGroup(
+                backend=DeepseekV41CacheBackend,
+                layer_names=[f"model.layers.{2 * gid}.self_attn.attn"],
+                kv_cache_spec=SimpleNamespace(),
+                kv_cache_group_id=gid,
+                metadata_builders=[_RecordingV41MetadataBuilder(calls)],
+            )
+        ]
+        for gid in range(2)
+    ]
+    kv_cache_config = SimpleNamespace(kv_cache_groups=[SimpleNamespace(), SimpleNamespace()])
+
+    attn_utils.build_attn_metadata(
+        attn_groups=attn_groups,
+        num_reqs=2,
+        num_actual_reqs=1,
+        num_tokens=4,
+        query_start_loc_gpu=torch.tensor([0, 2, 4], dtype=torch.int32),
+        query_start_loc_cpu=torch.tensor([0, 2, 4], dtype=torch.int32),
+        max_query_len=2,
+        seq_lens=torch.tensor([2, 2], dtype=torch.int32),
+        max_seq_len=4,
+        block_tables=(torch.zeros((2, 1), dtype=torch.int32),) * 2,
+        slot_mappings=(torch.zeros(4, dtype=torch.int32),) * 2,
+        kv_cache_config=kv_cache_config,
+        full_graph_mode=True,
+        for_cudagraph_capture=for_capture,
+    )
+
+    assert len(calls) == 2
+    for call in calls:
+        assert call["num_actual_reqs"] == 1
+        assert call["skip_ring_state_update"] is False
+        assert call["full_graph_mode"] is True
+        assert call["for_cudagraph_capture"] is for_capture
+    # Slot coordinates stay group-local while batch metadata is shared.
+    assert calls[0]["common_v41_metadata"] is not calls[1]["common_v41_metadata"]
+    assert calls[0]["common_v41_batch_metadata"] is calls[1]["common_v41_batch_metadata"]
+
+
+def _make_v41_runtime(monkeypatch):
+    vllm_config = SimpleNamespace(
+        model_config=SimpleNamespace(
+            hf_config=SimpleNamespace(compress_ratios=[2], model_type="deepseek_v4.1"),
+        ),
+        cache_config=SimpleNamespace(block_size=64, cache_dtype="auto"),
+        kv_transfer_config=None,
+    )
+    monkeypatch.setattr(attn_utils, "get_current_vllm_config", lambda: vllm_config)
+    monkeypatch.setattr(
+        upstream_attn_utils,
+        "get_shared_kv_cache_layers",
+        lambda _config: {},
+    )
+    return vllm_config
+
+
+def test_mrv2_initializes_v41_cache_layers_end_to_end(monkeypatch):
+    """Exercise V4.1 allocation, reshape, and binding as one flow."""
+    vllm_config = _make_v41_runtime(monkeypatch)
+    cache_config = make_cache_config(num_blocks=2, block_size=64, head_size=128, index_size=64, draft_layers=3)
+
+    forward_context: dict[str, Any] = {}
+    layer_names = []
+    for group in cache_config.kv_cache_groups:
+        for name in group.layer_names:
+            layer = DeepseekV41CacheLayer.__new__(DeepseekV41CacheLayer)
+            torch.nn.Module.__init__(layer)
+            layer.kv_cache = [torch.empty(0)]
+            forward_context[name] = layer
+            layer_names.append(name)
+
+    attn_groups = []
+    for gid, group in enumerate(cache_config.kv_cache_groups):
+        by_spec: dict[int, tuple[Any, list[str]]] = {}
+        for name in group.layer_names:
+            spec = group.kv_cache_spec.kv_cache_specs[name]
+            by_spec.setdefault(id(spec), (spec, []))[1].append(name)
+        attn_groups.append(
+            [
+                AttentionGroup(
+                    backend=DeepseekV41CacheBackend,
+                    layer_names=names,
+                    kv_cache_spec=spec,
+                    kv_cache_group_id=gid,
+                )
+                for spec, names in by_spec.values()
+            ]
+        )
+
+    kernel_block_sizes = [group.kv_cache_spec.block_size for group in cache_config.kv_cache_groups]
+    runner_kv_caches: list[Any] = []
+    kv_caches = upstream_attn_utils.init_kv_cache(
+        runner_kv_caches=runner_kv_caches,
+        forward_context=forward_context,
+        kv_cache_config=cache_config,
+        attn_groups=attn_groups,
+        device=torch.device("cpu"),
+        cache_dtype="auto",
+        kernel_block_sizes=kernel_block_sizes,
+        vllm_config=vllm_config,
+    )
+
+    # V4.1 layers consume ``kv_cache[0]``: the bound value must be a list.
+    for name in layer_names:
+        assert forward_context[name].kv_cache == [kv_caches[name]]
+    # The runner list is filled once per resource in sorted-name order.
+    assert len(runner_kv_caches) == len(layer_names)
+    assert runner_kv_caches == [kv_caches[name] for name in sorted(layer_names)]
+
+    # Views match the reference slot layout (shape and dtype per plane).
+    _, reference = allocate_cache_views(cache_config)
+    assert set(kv_caches) == set(reference)
+    for name, ref in reference.items():
+        mine = kv_caches[name]
+        mine_planes = mine if isinstance(mine, tuple) else (mine,)
+        ref_planes = ref if isinstance(ref, tuple) else (ref,)
+        for mine_plane, ref_plane in zip(mine_planes, ref_planes):
+            assert mine_plane.shape == ref_plane.shape
+            assert mine_plane.dtype == ref_plane.dtype
+
+
+def test_allocate_kv_cache_v41_rejects_mixed_specs(monkeypatch):
+    _make_v41_runtime(monkeypatch)
+    cache_config = make_cache_config(num_blocks=2, block_size=64, head_size=128, index_size=64)
+    cache_config.kv_cache_groups[-1].kv_cache_spec = AscendMLAAttentionSpec(
+        block_size=64,
+        num_kv_heads=1,
+        head_size=128,
+        dtype=torch.bfloat16,
+    )
+
+    with pytest.raises(ValueError, match="Mixed V4.1"):
+        attn_utils._allocate_kv_cache(cache_config, {}, torch.device("cpu"))
+
+
+def test_v41_eager_fallback_forces_skip_compiled_for_runtime_none():
+    from vllm_ascend.worker.v2 import model_runner as v2_model_runner
+
+    calls: list[dict[str, Any]] = []
+
+    @contextmanager
+    def fake_original(*args, **kwargs):
+        calls.append(kwargs.copy())
+        yield
+
+    original_fn = vllm_model_runner.set_forward_context
+    original_flag = v2_model_runner._V41_EAGER_FALLBACK_INSTALLED
+    v2_model_runner._V41_EAGER_FALLBACK_INSTALLED = False
+    vllm_model_runner.set_forward_context = fake_original
+    try:
+        v2_model_runner._install_v41_eager_fallback()
+
+        v41_config = SimpleNamespace(
+            model_config=SimpleNamespace(
+                hf_config=SimpleNamespace(model_type="deepseek_v4.1"),
+                hf_text_config=SimpleNamespace(model_type="deepseek_v4.1_text"),
+            )
+        )
+        llama_config = SimpleNamespace(
+            model_config=SimpleNamespace(
+                hf_config=SimpleNamespace(model_type="llama"),
+                hf_text_config=SimpleNamespace(model_type="llama"),
+            )
+        )
+
+        with vllm_model_runner.set_forward_context(None, v41_config, cudagraph_runtime_mode=CUDAGraphMode.NONE):
+            pass
+        assert calls[-1]["skip_compiled"] is True
+
+        # Uniform decode (FULL) still runs the compiled full graph.
+        with vllm_model_runner.set_forward_context(None, v41_config, cudagraph_runtime_mode=CUDAGraphMode.FULL):
+            pass
+        assert "skip_compiled" not in calls[-1]
+
+        # Non-V4.1 models keep upstream behavior untouched.
+        with vllm_model_runner.set_forward_context(None, llama_config, cudagraph_runtime_mode=CUDAGraphMode.NONE):
+            pass
+        assert "skip_compiled" not in calls[-1]
+    finally:
+        vllm_model_runner.set_forward_context = original_fn
+        v2_model_runner._V41_EAGER_FALLBACK_INSTALLED = original_flag
