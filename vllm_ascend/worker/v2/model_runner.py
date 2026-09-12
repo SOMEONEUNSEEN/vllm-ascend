@@ -65,7 +65,11 @@ if not vllm_version_is("0.27.1"):
     from vllm.v1.worker.gpu.model_runner import BatchReqState
 
 from vllm_ascend.worker.v2.aclgraph_utils import ModelAclGraphManager
-from vllm_ascend.worker.v2.attn_utils import build_attn_state
+from vllm_ascend.worker.v2.attn_utils import (
+    build_attn_state,
+    ring_state_update_skipped,
+    skip_ring_state_update,
+)
 from vllm_ascend.worker.v2.eplb import AscendEPLBController
 from vllm_ascend.worker.v2.input_batch import AscendInputBatch, AscendInputBuffers
 from vllm_ascend.worker.v2.pcp_manager import AscendPCPManager
@@ -330,8 +334,25 @@ class NPUModelRunner(GPUModelRunner):
             for module in self.model.modules():
                 if isinstance(module, DeepseekV41Compressor) and module.ratio == 2:
                     module.prepare_ring_compressor(self.max_num_tokens, self.device)
+        self._prepare_v41_source_rope()
         if self.model_config.enable_return_routed_experts:
             self.init_routed_experts_capturer()
+
+    def _prepare_v41_source_rope(self) -> None:
+        """Validate and cache V4.1 source RoPE tables on compressor builders.
+
+        Runner V1 wires this through ``enable_device_metadata`` inside
+        ``initialize_attn_backend``; runner V2 keeps metadata tasks
+        synchronous (``_publish_task`` runs them inline), so only the RoPE
+        cache initialization is needed here. ``build`` raises without it.
+        """
+        from vllm_ascend.attention.dsa_v41 import DeepseekV41MetadataBuilder
+
+        for groups in self.attn_groups:
+            for attn_group in groups:
+                for builder in attn_group.metadata_builders:
+                    if isinstance(builder, DeepseekV41MetadataBuilder):
+                        builder.prepare_source_rope()
 
     def prepare_dummy_attn(
         self,
@@ -343,9 +364,13 @@ class NPUModelRunner(GPUModelRunner):
         Upstream zero-fills dummy block tables, which would alias every
         dummy request onto page 0; assign distinct live state IDs
         1..num_reqs and zero those ring pages so graph capture/replay see
-        a clean ring instead of stale or aliased state.
+        a clean ring instead of stale or aliased state. Fully skipped for
+        dummy batches marked skip_gdn_state_update (mirrors MRV1, which
+        suppresses both the ring prep and the state writes there).
         """
         block_tables, slot_mappings = super().prepare_dummy_attn(input_batch)
+        if ring_state_update_skipped():
+            return block_tables, slot_mappings
         num_reqs = input_batch.num_reqs
         for gid, group in enumerate(self.kv_cache_config.kv_cache_groups):
             if not is_circular_spec(group.kv_cache_spec):
@@ -952,16 +977,23 @@ class NPUModelRunner(GPUModelRunner):
         Zero-indexed rows at the same capacity as sample() (both from
         ``_lmhead_tp_max_num_logits()``; a mismatch hangs). Skipped for
         profiling and non-last PP ranks. Draft-side alignment is not covered.
+
+        ``skip_gdn_state_update`` arrives from worker.execute_dummy_batch;
+        upstream drops unknown kwargs, so it is routed through the
+        ring-state ContextVar consumed by build_attn_metadata and
+        prepare_dummy_attn.
         """
-        hidden_states, sample_hidden_states = super()._dummy_run(
-            num_tokens,
-            *args,
-            skip_attn=skip_attn,
-            uniform_decode=uniform_decode,
-            skip_eplb=skip_eplb,
-            is_profile=is_profile,
-            **kwargs,
-        )
+        skip_ring = bool(kwargs.pop("skip_gdn_state_update", False))
+        with skip_ring_state_update(skip_ring):
+            hidden_states, sample_hidden_states = super()._dummy_run(
+                num_tokens,
+                *args,
+                skip_attn=skip_attn,
+                uniform_decode=uniform_decode,
+                skip_eplb=skip_eplb,
+                is_profile=is_profile,
+                **kwargs,
+            )
         if lmhead_tp_enable() and not is_profile and hidden_states is not None:
             dummy_indices = torch.zeros(
                 self._lmhead_tp_max_num_logits(),

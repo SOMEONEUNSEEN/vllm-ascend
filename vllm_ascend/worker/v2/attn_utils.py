@@ -19,6 +19,7 @@
 
 from collections.abc import Mapping, Sequence
 from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
@@ -67,6 +68,26 @@ from vllm_ascend.utils import (
 
 if TYPE_CHECKING:
     from vllm_ascend.worker.v2.pcp_manager import AscendPCPAttentionContext
+
+
+# MRV2's upstream _dummy_run drops runner-specific kwargs such as
+# ``skip_gdn_state_update``, so the flag travels through this ContextVar
+# (mirroring ``override_mrv2_in_profile_run``) instead of the call chain.
+_SKIP_RING_STATE_UPDATE: ContextVar[bool] = ContextVar("_SKIP_RING_STATE_UPDATE", default=False)
+
+
+@contextmanager
+def skip_ring_state_update(enabled: bool):
+    """Scope dummy runs that must not touch V4.1 compressor ring state."""
+    token = _SKIP_RING_STATE_UPDATE.set(enabled)
+    try:
+        yield
+    finally:
+        _SKIP_RING_STATE_UPDATE.reset(token)
+
+
+def ring_state_update_skipped() -> bool:
+    return _SKIP_RING_STATE_UPDATE.get()
 
 
 def get_kv_cache_spec(vllm_config: VllmConfig) -> dict[str, KVCacheSpec]:
@@ -213,10 +234,13 @@ def build_attn_metadata(
     # V4.1 (Aurora) builders need the runtime graph mode to decide between
     # graph-friendly and eager metadata paths, and a flag to skip ring-state
     # writes during dummy runs that must not touch the compressor state.
+    # ``None`` resolves from the dummy-run scope ContextVar.
     full_graph_mode: bool = False,
-    skip_ring_state_update: bool = False,
+    skip_ring_state_update: bool | None = None,
 ) -> dict[str, Any]:
     """Build attention metadata for Ascend NPUs."""
+    if skip_ring_state_update is None:
+        skip_ring_state_update = ring_state_update_skipped()
     # TODO(Ronald1995): optimize AscendCommonAttentionMetadata.
     # seq_lens_np is used for ascend npus, it maybe None in spec_decode case,
     # we fill it with max_seq_len in case `attn_metadata_builder.build` raise

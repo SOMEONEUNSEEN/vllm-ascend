@@ -673,15 +673,25 @@ class DeepseekV41MetadataBuilder(AttentionMetadataBuilder[DeepseekV41Metadata]):
 
     def enable_device_metadata(self) -> None:
         self._device_metadata_enabled = True
-        if isinstance(self.kv_cache_spec, DeepseekV41CompressorStateSpec):
-            if not self._c2_rope_layer_names:
-                raise RuntimeError("V4.1 compressor-state builder has no source RoPE layer")
-            source_rope = get_full_cos_and_sin_dsa_for_layer(self._c2_rope_layer_names[0])
-            for rope_layer_name in self._c2_rope_layer_names[1:]:
-                other_rope = get_full_cos_and_sin_dsa_for_layer(rope_layer_name)
-                if any(other.data_ptr() != source.data_ptr() for other, source in zip(other_rope, source_rope)):
-                    raise RuntimeError("V4.1 ratio-2 source layers must share one RoPE table")
-            self._c2_full_source_rope = source_rope
+        self.prepare_source_rope()
+
+    def prepare_source_rope(self) -> None:
+        """Initialize the shared source RoPE tables for C2 metadata gathers.
+
+        Split out of ``enable_device_metadata`` so runner V2 (which keeps
+        metadata tasks synchronous) can still validate that all ratio-2
+        source layers share one RoPE table before the first build.
+        """
+        if not isinstance(self.kv_cache_spec, DeepseekV41CompressorStateSpec):
+            return
+        if not self._c2_rope_layer_names:
+            raise RuntimeError("V4.1 compressor-state builder has no source RoPE layer")
+        source_rope = get_full_cos_and_sin_dsa_for_layer(self._c2_rope_layer_names[0])
+        for rope_layer_name in self._c2_rope_layer_names[1:]:
+            other_rope = get_full_cos_and_sin_dsa_for_layer(rope_layer_name)
+            if any(other.data_ptr() != source.data_ptr() for other, source in zip(other_rope, source_rope)):
+                raise RuntimeError("V4.1 ratio-2 source layers must share one RoPE table")
+        self._c2_full_source_rope = source_rope
 
     def take_device_metadata_tasks(self) -> tuple[DeviceMetadataTask, ...]:
         tasks = self._device_metadata_tasks

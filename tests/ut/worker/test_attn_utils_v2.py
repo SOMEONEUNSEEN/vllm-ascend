@@ -615,6 +615,77 @@ def test_build_attn_metadata_injects_v41_shared_dicts_across_groups(for_capture)
     assert calls[0]["common_v41_batch_metadata"] is calls[1]["common_v41_batch_metadata"]
 
 
+def _build_one_v41_metadata_call(calls, **extra):
+    attn_group = SimpleNamespace(
+        layer_names=["layer.0"],
+        get_metadata_builder=lambda _: _RecordingV41MetadataBuilder(calls),
+    )
+    attn_utils.build_attn_metadata(
+        attn_groups=[[attn_group]],
+        num_reqs=1,
+        num_tokens=1,
+        query_start_loc_gpu=torch.tensor([0, 1], dtype=torch.int32),
+        query_start_loc_cpu=torch.tensor([0, 1], dtype=torch.int32),
+        max_query_len=1,
+        seq_lens=torch.tensor([1], dtype=torch.int32),
+        max_seq_len=1,
+        block_tables=(torch.zeros((1, 1), dtype=torch.int32),),
+        slot_mappings=(torch.zeros(1, dtype=torch.int32),),
+        kv_cache_config=SimpleNamespace(kv_cache_groups=[SimpleNamespace()]),
+        **extra,
+    )
+
+
+def test_build_attn_metadata_resolves_skip_ring_from_dummy_run_scope():
+    calls: list[dict[str, Any]] = []
+
+    with attn_utils.skip_ring_state_update(True):
+        _build_one_v41_metadata_call(calls)
+    assert calls[0]["skip_ring_state_update"] is True
+
+    # Outside the scope the flag resets, and an explicit argument still wins.
+    _build_one_v41_metadata_call(calls)
+    assert calls[1]["skip_ring_state_update"] is False
+    with attn_utils.skip_ring_state_update(True):
+        _build_one_v41_metadata_call(calls, skip_ring_state_update=False)
+    assert calls[2]["skip_ring_state_update"] is False
+
+
+def test_v41_prepare_source_rope_initializes_cache_without_async_tasks(monkeypatch):
+    from vllm_ascend.attention import dsa_v41
+    from vllm_ascend.core.deepseek_v41 import DeepseekV41CompressorStateSpec
+
+    spec = DeepseekV41CompressorStateSpec(
+        block_size=32,
+        num_kv_heads=1,
+        head_size=64,
+        dtype=torch.float32,
+    )
+    vllm_config = SimpleNamespace(
+        scheduler_config=SimpleNamespace(max_num_batched_tokens=8, max_num_seqs=4),
+        model_config=SimpleNamespace(hf_text_config=SimpleNamespace(qk_rope_head_dim=16)),
+    )
+    builder = dsa_v41.DeepseekV41MetadataBuilder(
+        spec,
+        ["model.layers.2.self_attn.compressor.state_cache"],
+        vllm_config,
+        torch.device("cpu"),
+    )
+    rope = (torch.zeros(4), torch.ones(4))
+    monkeypatch.setattr(
+        dsa_v41,
+        "get_full_cos_and_sin_dsa_for_layer",
+        lambda _name: rope,
+    )
+    assert builder._c2_full_source_rope is None
+
+    builder.prepare_source_rope()
+
+    assert builder._c2_full_source_rope is rope
+    # Synchronous mode: runner V2 must not enable async device tasks.
+    assert builder._device_metadata_enabled is False
+
+
 def _make_v41_runtime(monkeypatch):
     vllm_config = SimpleNamespace(
         model_config=SimpleNamespace(
