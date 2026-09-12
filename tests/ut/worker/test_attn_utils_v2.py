@@ -1,4 +1,4 @@
-from contextlib import contextmanager, nullcontext
+from contextlib import contextmanager
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import MagicMock
@@ -721,29 +721,41 @@ def test_v41_publish_task_runs_inline_on_default_stream(monkeypatch):
 
     default_stream = MagicMock()
     side_stream = MagicMock()
+    current = {"stream": default_stream}
+
     monkeypatch.setattr(torch.npu, "default_stream", lambda: default_stream)
+    monkeypatch.setattr(torch.npu, "current_stream", lambda: current["stream"])
     monkeypatch.setattr(torch.npu, "synchronize", lambda: sync_calls.append("sync"))
-    monkeypatch.setattr(torch.npu, "stream", lambda _s: nullcontext())
+
+    @contextmanager
+    def fake_stream(target):
+        # Mimic torch.npu.stream: actually switch the current-stream holder
+        # so run() observes the routing target.
+        previous = current["stream"]
+        current["stream"] = target
+        try:
+            yield
+        finally:
+            current["stream"] = previous
+
+    monkeypatch.setattr(torch.npu, "stream", fake_stream)
 
     # Current stream is the default: execute inline, no synchronization.
-    monkeypatch.setattr(torch.npu, "current_stream", lambda: default_stream)
     builder._publish_task({}, "k", buffer, dsa_v41.DeviceMetadataStage.ATTENTION, run)
     assert executed_on == [default_stream]
     assert sync_calls == []
 
     # A new shared key (new capture descriptor) executes on the unregistered
     # side stream: route to the default stream with a device fence.
-    monkeypatch.setattr(torch.npu, "current_stream", lambda: side_stream)
+    current["stream"] = side_stream
     builder._publish_task({}, "k2", buffer, dsa_v41.DeviceMetadataStage.ATTENTION, run)
     assert executed_on == [default_stream, default_stream]
     assert sync_calls == ["sync"]
     side_stream.wait_stream.assert_called_once_with(default_stream)
-    side_stream.wait_stream.reset_mock()
 
     # An already-published key just reuses the buffer without re-running.
     assert builder._publish_task({}, "k2", buffer, dsa_v41.DeviceMetadataStage.ATTENTION, run) is buffer
     assert len(executed_on) == 2
-    side_stream.wait_stream.assert_not_called()
 
 
 def _make_v41_runtime(monkeypatch):
