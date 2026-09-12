@@ -331,12 +331,10 @@ def test_model_registration_and_binding(runtime):
     assert len(owned_names) == 51
 
 
-@pytest.mark.parametrize("feature", ["spec", "pd", "pp", "graph"])
+@pytest.mark.parametrize("feature", ["spec", "pp", "graph"])
 def test_unsupported_runtime_fails_before_registration(runtime, feature):
     if feature == "spec":
         runtime.speculative_config = object()
-    elif feature == "pd":
-        runtime.kv_transfer_config = object()
     elif feature == "pp":
         runtime.parallel_config.pipeline_parallel_size = 2
     else:
@@ -352,6 +350,15 @@ def test_v2_model_runner_runtime_is_supported(runtime):
     from vllm_ascend.core.deepseek_v41 import validate_cache_runtime
 
     runtime.use_v2_model_runner = True
+    validate_cache_runtime(runtime)
+
+
+def test_kv_transfer_runtime_is_supported(runtime):
+    # PD disaggregation (kv_transfer) was enabled for V4.1 by removing the
+    # rejection from validate_cache_runtime; a non-None config must pass.
+    from vllm_ascend.core.deepseek_v41 import validate_cache_runtime
+
+    runtime.kv_transfer_config = object()
     validate_cache_runtime(runtime)
 
 
