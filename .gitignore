@@ -235,5 +235,8 @@ csrc/third_party/
 .aider*
 .windsurf/
 
+# one-off debugging/testing scratch files
+.tmp_*
+
 # local build cache
 .vllm_ascend/
