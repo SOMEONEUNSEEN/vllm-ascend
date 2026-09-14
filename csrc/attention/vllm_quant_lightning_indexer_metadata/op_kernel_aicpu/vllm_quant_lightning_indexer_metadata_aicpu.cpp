@@ -96,9 +96,10 @@ bool VllmQuantLightningIndexerMetadataCpuKernel::CheckSingleParam()
         KERNEL_LOG_ERROR("max_seqlen_k should not be negative, but got %d", maxSeqlenK_);
         return false;
     }
-    // num_heads_q 校验
-    if (numHeadsQ_ != 64) {
-        KERNEL_LOG_ERROR("num_heads_q should only be 64, but got %d", numHeadsQ_);
+    // num_heads_q 校验：仅要求为正。TP 切分后（如 deepseek v4.1 dspark draft，
+    // TP2 下 index_n_heads=32）heads 数不再是 64，不能按 64 硬校验。
+    if (numHeadsQ_ <= 0) {
+        KERNEL_LOG_ERROR("num_heads_q should be positive, but got %d", numHeadsQ_);
         return false;
     }
     // num_heads_k 校验
