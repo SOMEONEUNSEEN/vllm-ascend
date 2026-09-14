@@ -309,6 +309,50 @@ class TestAscendRejectionSampler(TestBase):
     @patch("torch.ones", new=mock_pin_memory(torch.ones))
     @patch("torch.full", new=mock_pin_memory(torch.full))
     @patch("torch.tensor", new=mock_pin_memory(torch.tensor))
+    def test_sample_recovered_tokens_pytorch_ngram_mixed_placeholder(self):
+        """Regression: ngram path with mixed valid/placeholder drafts.
+
+        Only valid draft positions are zeroed in target_probs; placeholder
+        rows keep their distribution. Guards the gather/scatter rewrite of
+        bool advanced indexing (aclnnNonzeroV2 on NPU).
+        """
+        output_token_ids = torch.empty(3, dtype=torch.int32)
+        cu_num_draft_tokens = torch.tensor([1, 2])
+        draft_token_ids = torch.tensor([1, 2, PLACEHOLDER_TOKEN_ID])
+        target_probs = torch.tensor(
+            [
+                [0.05, 0.2, 0.75],
+                [0.3, 0.3, 0.4],
+                [0.25, 0.5, 0.25],
+            ]
+        )
+        q = torch.tensor(
+            [
+                [0.1, 0.2, 0.7],
+                [0.5, 0.4, 0.1],
+            ]
+        )
+
+        sample_recovered_tokens_pytorch(
+            output_token_ids,
+            cu_num_draft_tokens,
+            draft_token_ids,
+            None,
+            target_probs,
+            q,
+            vocab_size=3,
+            IS_NGRAM=True,
+        )
+
+        # Row 0: draft 1 zeroed -> [0.05, 0, 0.75] / q[0] -> argmax 2
+        # Row 1: draft 2 zeroed -> [0.3, 0.3, 0] / q[1] -> argmax 1
+        # Row 2: placeholder draft keeps distribution -> argmax 2
+        assert output_token_ids.tolist() == [2, 1, 2]
+
+    @patch("torch.arange", new=mock_pin_memory(torch.arange))
+    @patch("torch.ones", new=mock_pin_memory(torch.ones))
+    @patch("torch.full", new=mock_pin_memory(torch.full))
+    @patch("torch.tensor", new=mock_pin_memory(torch.tensor))
     def test_reduce_sample_recovered_tokens_pytorch_ngram(self):
         """Test recovered token sampling under n-gram mode"""
         output_token_ids = torch.empty(2, dtype=torch.int32)
@@ -350,6 +394,55 @@ class TestAscendRejectionSampler(TestBase):
 
         assert output_token_ids[0].item() == 0
         assert output_token_ids[1].item() == 1
+
+    @patch("torch.arange", new=mock_pin_memory(torch.arange))
+    @patch("torch.ones", new=mock_pin_memory(torch.ones))
+    @patch("torch.full", new=mock_pin_memory(torch.full))
+    @patch("torch.tensor", new=mock_pin_memory(torch.tensor))
+    def test_reduce_sample_recovered_tokens_pytorch_ngram_mixed_placeholder(self):
+        """Regression: reduce-sampling ngram path with mixed drafts.
+
+        Guards the vectorized where rewrite of the per-token bool indexing
+        loop: placeholder rows must not be zeroed at index 0.
+        """
+        output_token_ids = torch.empty(3, dtype=torch.int32)
+        cu_num_draft_tokens = torch.tensor([1, 2])
+        draft_token_ids = torch.tensor([1, 2, PLACEHOLDER_TOKEN_ID])
+        target_probs = torch.tensor(
+            [
+                [0.05, 0.2, 0.75],
+                [0.3, 0.3, 0.4],
+                [0.25, 0.5, 0.25],
+            ]
+        )
+        q = torch.tensor(
+            [
+                [0.1, 0.2, 0.7],
+                [0.5, 0.4, 0.1],
+            ]
+        )
+        target_indices = torch.tensor(
+            [
+                [0, 1, 2],
+                [0, 1, 2],
+                [0, 1, 2],
+            ]
+        )
+
+        sample_recovered_tokens_pytorch(
+            output_token_ids,
+            cu_num_draft_tokens,
+            draft_token_ids,
+            None,
+            target_probs,
+            q,
+            vocab_size=3,
+            IS_NGRAM=True,
+            target_indices=target_indices,
+            enable_reduce_sampling=True,
+        )
+
+        assert output_token_ids.tolist() == [2, 1, 2]
 
     @patch("torch.arange", new=mock_pin_memory(torch.arange))
     @patch("torch.ones", new=mock_pin_memory(torch.ones))
@@ -456,6 +549,95 @@ class TestAscendRejectionSampler(TestBase):
 
         assert output_token_ids[0].item() == 0
         assert output_token_ids[1].item() == 1
+
+    @patch("torch.arange", new=mock_pin_memory(torch.arange))
+    @patch("torch.ones", new=mock_pin_memory(torch.ones))
+    @patch("torch.full", new=mock_pin_memory(torch.full))
+    @patch("torch.tensor", new=mock_pin_memory(torch.tensor))
+    def test_sample_recovered_tokens_blockwise_pytorch_ngram_mixed_placeholder(self):
+        """Regression: blockwise ngram path with mixed valid/placeholder drafts.
+
+        Guards the gather/scatter rewrite of bool advanced indexing
+        (aclnnNonzeroV2 on NPU) in the blockwise normal-mode branch.
+        """
+        output_token_ids = torch.empty(3, dtype=torch.int32)
+        cu_num_draft_tokens = torch.tensor([1, 2])
+        draft_token_ids = torch.tensor([1, 2, PLACEHOLDER_TOKEN_ID])
+        target_probs = torch.tensor(
+            [
+                [0.05, 0.2, 0.75],
+                [0.3, 0.3, 0.4],
+                [0.25, 0.5, 0.25],
+            ]
+        )
+        q = torch.tensor(
+            [
+                [0.1, 0.2, 0.7],
+                [0.5, 0.4, 0.1],
+            ]
+        )
+
+        sample_recovered_tokens_blockwise_pytorch(
+            output_token_ids,
+            cu_num_draft_tokens,
+            draft_token_ids,
+            None,
+            target_probs,
+            q,
+            vocab_size=3,
+            IS_NGRAM=True,
+        )
+
+        assert output_token_ids.tolist() == [2, 1, 2]
+
+    @patch("torch.arange", new=mock_pin_memory(torch.arange))
+    @patch("torch.ones", new=mock_pin_memory(torch.ones))
+    @patch("torch.full", new=mock_pin_memory(torch.full))
+    @patch("torch.tensor", new=mock_pin_memory(torch.tensor))
+    def test_reduce_sample_recovered_tokens_blockwise_pytorch_ngram_mixed_placeholder(self):
+        """Regression: blockwise reduce-sampling ngram path with mixed drafts.
+
+        Guards the vectorized where rewrite of the per-token bool indexing
+        loop: placeholder rows must not be zeroed at index 0.
+        """
+        output_token_ids = torch.empty(3, dtype=torch.int32)
+        cu_num_draft_tokens = torch.tensor([1, 2])
+        draft_token_ids = torch.tensor([1, 2, PLACEHOLDER_TOKEN_ID])
+        target_probs = torch.tensor(
+            [
+                [0.05, 0.2, 0.75],
+                [0.3, 0.3, 0.4],
+                [0.25, 0.5, 0.25],
+            ]
+        )
+        q = torch.tensor(
+            [
+                [0.1, 0.2, 0.7],
+                [0.5, 0.4, 0.1],
+            ]
+        )
+        target_indices = torch.tensor(
+            [
+                [0, 1, 2],
+                [0, 1, 2],
+                [0, 1, 2],
+            ]
+        )
+
+        sample_recovered_tokens_blockwise_pytorch(
+            output_token_ids,
+            cu_num_draft_tokens,
+            draft_token_ids,
+            None,
+            target_probs,
+            q,
+            vocab_size=3,
+            IS_NGRAM=True,
+            target_indices=target_indices,
+            enable_reduce_sampling=True,
+        )
+
+        assert output_token_ids.tolist() == [2, 1, 2]
 
     @patch("torch.arange", new=mock_pin_memory(torch.arange))
     @patch("torch.ones", new=mock_pin_memory(torch.ones))

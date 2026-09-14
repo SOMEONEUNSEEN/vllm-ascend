@@ -1330,13 +1330,14 @@ def sample_recovered_tokens_pytorch(
         # enable reduce_sampling: target_probs is [num_tokens, selected_vocab_size]
         # target_indices maps compressed indices to global vocab indices
         if IS_NGRAM:
-            # Zero out the draft token in target_probs
-            prob = target_probs.clone()
-            for i in range(num_tokens):
-                draft_id = draft_token_ids[i]
-                if draft_id != PLACEHOLDER_TOKEN_ID:
-                    mask = target_indices[i] == draft_id
-                    prob[i, mask] = 0
+            # Zero out the draft token in target_probs. Vectorized where
+            # replaces the per-token bool indexing loop (`prob[i, mask] = 0`
+            # dispatches to aclnnNonzeroV2, an AICPU op with data-dependent
+            # output shape that forces host sync and is flaky under load).
+            valid_draft_mask = draft_token_ids != PLACEHOLDER_TOKEN_ID
+            safe_draft_token_ids = draft_token_ids.clamp_min(0)
+            match = (target_indices == safe_draft_token_ids[:, None]) & valid_draft_mask[:, None]
+            prob = torch.where(match, torch.zeros_like(target_probs), target_probs)
         else:
             # Gather draft probs at candidate indices
             flat_indices = target_indices.flatten()
@@ -1357,14 +1358,20 @@ def sample_recovered_tokens_pytorch(
     else:
         # normal mode
         if IS_NGRAM:
-            token_indices = torch.arange(num_tokens, device=device)
-
-            modified_target_probs = target_probs.clone()
+            # Zero out target_probs[i, draft_token_ids[i]] for valid drafts.
+            # gather/scatter replaces bool advanced indexing (which dispatches
+            # to aclnnNonzeroV2, an AICPU op with data-dependent output shape
+            # that forces host sync and is flaky under load).
             valid_draft_mask = draft_token_ids != PLACEHOLDER_TOKEN_ID
-            modified_target_probs[
-                token_indices[valid_draft_mask],
-                draft_token_ids[valid_draft_mask],
-            ] = 0
+            safe_draft_token_ids = draft_token_ids.clamp_min(0).to(torch.int64)
+            orig_at_draft = target_probs.gather(1, safe_draft_token_ids.unsqueeze(1)).squeeze(1)
+            zeroed = torch.where(
+                valid_draft_mask,
+                torch.zeros_like(orig_at_draft),
+                orig_at_draft,
+            )
+            modified_target_probs = target_probs.clone()
+            modified_target_probs.scatter_(1, safe_draft_token_ids.unsqueeze(1), zeroed.unsqueeze(1))
             prob = modified_target_probs
 
         else:
@@ -1598,13 +1605,12 @@ def sample_recovered_tokens_blockwise_pytorch(
     if enable_reduce_sampling:
         # enable reduce_sampling: residual computation with selected vocab
         if IS_NGRAM:
-            # Zero out the draft token in target_probs
-            prob = target_probs.clone()
-            for i in range(num_tokens):
-                draft_id = draft_token_ids[i]
-                if draft_id != PLACEHOLDER_TOKEN_ID:
-                    mask = target_indices[i] == draft_id
-                    prob[i, mask] = 0
+            # Zero out the draft token in target_probs (vectorized where;
+            # see sample_recovered_tokens_pytorch for the AICPU rationale).
+            valid_draft_mask = draft_token_ids != PLACEHOLDER_TOKEN_ID
+            safe_draft_token_ids = draft_token_ids.clamp_min(0)
+            match = (target_indices == safe_draft_token_ids[:, None]) & valid_draft_mask[:, None]
+            prob = torch.where(match, torch.zeros_like(target_probs), target_probs)
             residual = torch.clamp(p_i_expanded * prob, min=0.0)
         else:
             # Gather draft probs at candidate indices (same as sample_recovered_tokens_pytorch)
@@ -1623,12 +1629,19 @@ def sample_recovered_tokens_blockwise_pytorch(
     else:
         # normal mode
         if IS_NGRAM:
-            modified_target = target_probs.clone()
+            # Zero out target_probs[i, draft_token_ids[i]] for valid drafts
+            # (gather/scatter; see sample_recovered_tokens_pytorch for the
+            # AICPU rationale).
             valid_draft_mask = draft_token_ids != PLACEHOLDER_TOKEN_ID
-            modified_target[
-                token_indices[valid_draft_mask],
-                draft_token_ids[valid_draft_mask],
-            ] = 0.0
+            safe_draft_token_ids = draft_token_ids.clamp_min(0).to(torch.int64)
+            orig_at_draft = target_probs.gather(1, safe_draft_token_ids.unsqueeze(1)).squeeze(1)
+            zeroed = torch.where(
+                valid_draft_mask,
+                torch.zeros_like(orig_at_draft),
+                orig_at_draft,
+            )
+            modified_target = target_probs.clone()
+            modified_target.scatter_(1, safe_draft_token_ids.unsqueeze(1), zeroed.unsqueeze(1))
             residual = torch.clamp(p_i_expanded * modified_target, min=0.0)
         else:
             residual = torch.clamp(p_i_expanded * target_probs - draft_probs, min=0.0)
