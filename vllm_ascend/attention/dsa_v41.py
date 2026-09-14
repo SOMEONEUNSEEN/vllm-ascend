@@ -652,6 +652,11 @@ class DeepseekV41MetadataBuilder(AttentionMetadataBuilder[DeepseekV41Metadata]):
         self._c2_full_source_rope: tuple[torch.Tensor, torch.Tensor] | None = None
         self._device_metadata_enabled = False
         self._device_metadata_tasks: tuple[DeviceMetadataTask, ...] = ()
+        # Keys published in the current build cycle. Metadata kernels must
+        # re-run every step (they encode per-step batch coordinates), so this
+        # only deduplicates repeated publishes of the same key within one
+        # build(); build() resets it.
+        self._published_tasks: dict[str, torch.Tensor] = {}
 
     @classmethod
     def get_cudagraph_support(
@@ -710,6 +715,11 @@ class DeepseekV41MetadataBuilder(AttentionMetadataBuilder[DeepseekV41Metadata]):
         existing = shared.get(key)
         if existing is not None:
             return existing
+        if self._published_tasks.get(key) is buffer:
+            # Already published in this build cycle: the earlier launch owns
+            # the buffer, so reuse it without re-running the kernel.
+            return buffer
+        self._published_tasks[key] = buffer
         shared[key] = buffer
         if self._device_metadata_enabled:
             self._device_metadata_tasks = (
@@ -792,6 +802,7 @@ class DeepseekV41MetadataBuilder(AttentionMetadataBuilder[DeepseekV41Metadata]):
         if common_prefix_len:
             raise NotImplementedError("V4.1 prefix caching is not implemented")
         self._device_metadata_tasks = ()
+        self._published_tasks = {}
         spec = self.kv_cache_spec
         common = common_attn_metadata
         is_compressor_state = isinstance(spec, DeepseekV41CompressorStateSpec)
