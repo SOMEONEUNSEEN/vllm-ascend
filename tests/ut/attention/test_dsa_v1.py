@@ -881,7 +881,7 @@ def test_build_classifies_short_speculative_extends_as_decodes(
 
 
 def test_build_req_metadata_preserves_zero_max_sequence_lengths():
-    builder = _make_builder(compressor_ratio=1)
+    builder = _make_builder(compressor_ratio=4)
     builder.common_ratio_to_sas_metadata = {}
     builder.num_actual_tokens = 0
     builder.num_prefills = 1
@@ -898,14 +898,17 @@ def test_build_req_metadata_preserves_zero_max_sequence_lengths():
     builder._build_sas_metadata = MagicMock(return_value=torch.zeros(DSA_METADATA_BUFFER_SIZE, dtype=torch.int32))
     builder._build_qli_metadata = MagicMock(return_value=torch.zeros(DSA_METADATA_BUFFER_SIZE, dtype=torch.int32))
 
-    metadata = builder.build_req_metadata(
-        common_attn_metadata=common_attn_metadata,
-        seq_lens_cpu=torch.zeros(2, dtype=torch.int32),
-        num_actual_reqs=None,
-        cos=torch.empty(0),
-        sin=torch.empty(0),
-    )
-
+    with patch(
+        "vllm_ascend.attention.dsa_v1.get_full_cos_and_sin_dsa",
+        return_value=(torch.ones(1), torch.zeros(1)),
+    ):
+        metadata = builder.build_req_metadata(
+            common_attn_metadata=common_attn_metadata,
+            seq_lens_cpu=torch.zeros(2, dtype=torch.int32),
+            num_actual_reqs=None,
+            cos=torch.empty(0),
+            sin=torch.empty(0),
+        )
     sas_kwargs = builder._build_sas_metadata.call_args.kwargs
     qli_kwargs = builder._build_qli_metadata.call_args.kwargs
     assert sas_kwargs["max_seqlen_q"] == 0
@@ -916,7 +919,7 @@ def test_build_req_metadata_preserves_zero_max_sequence_lengths():
 
 
 def test_build_req_metadata_clears_graph_padding_rows():
-    builder = _make_builder(compressor_ratio=1)
+    builder = _make_builder(compressor_ratio=4)
     builder.common_ratio_to_sas_metadata = {}
     builder.num_actual_tokens = 2
     builder.num_prefills = 1
@@ -936,13 +939,17 @@ def test_build_req_metadata_clears_graph_padding_rows():
     builder._build_sas_metadata = MagicMock(return_value=torch.zeros(DSA_METADATA_BUFFER_SIZE, dtype=torch.int32))
     builder._build_qli_metadata = MagicMock(return_value=torch.zeros(DSA_METADATA_BUFFER_SIZE, dtype=torch.int32))
 
-    metadata = builder.build_req_metadata(
-        common_attn_metadata=common_attn_metadata,
-        seq_lens_cpu=torch.tensor([8, 6, 7], dtype=torch.int32),
-        num_actual_reqs=1,
-        cos=torch.ones(2),
-        sin=torch.zeros(2),
-    )
+    with patch(
+        "vllm_ascend.attention.dsa_v1.get_full_cos_and_sin_dsa",
+        return_value=(torch.ones(1), torch.zeros(1)),
+    ):
+        metadata = builder.build_req_metadata(
+            common_attn_metadata=common_attn_metadata,
+            seq_lens_cpu=torch.tensor([8, 6, 7], dtype=torch.int32),
+            num_actual_reqs=1,
+            cos=torch.ones(2),
+            sin=torch.zeros(2),
+        )
 
     assert metadata.num_actual_reqs == 1
     assert torch.equal(
@@ -951,6 +958,58 @@ def test_build_req_metadata_clears_graph_padding_rows():
     )
     assert torch.equal(metadata.block_table[0], torch.tensor([1, 2]))
     assert torch.count_nonzero(metadata.block_table[1:]).item() == 0
+
+
+@pytest.mark.parametrize(
+    ("compressor_ratio", "expect_qli_build"),
+    [(4, True), (128, False), (1, False), (0, False)],
+    ids=["ratio4", "ratio128", "ratio1", "ratio0_draft"],
+)
+def test_build_req_metadata_inline_builds_qli_only_for_ratio4(compressor_ratio: int, expect_qli_build: bool):
+    """Inline metadata path (no device-metadata executor): QLI metadata has a
+    single consumer, the V4 indexer's select_topk, which only exists on
+    compressed ratio-4 layers. Non-compressed layers (dspark draft SWA runs
+    ratio 0) must skip the build; the operator would reject TP-sharded
+    index_n_heads != 64 anyway."""
+    builder = _make_builder(compressor_ratio=compressor_ratio)
+    builder.common_ratio_to_sas_metadata = {}
+    builder.num_actual_tokens = 3
+    builder.num_prefills = 1
+    builder.seq_lens = torch.tensor([8, 6], dtype=torch.int32)
+    builder.block_table = torch.tensor([[1, 2], [3, 4]], dtype=torch.int32)
+    query_start_loc = torch.tensor([0, 2, 3], dtype=torch.int32)
+    common_attn_metadata = SimpleNamespace(
+        num_reqs=2,
+        num_input_tokens=3,
+        positions=torch.arange(3, dtype=torch.int64),
+        query_start_loc=query_start_loc,
+        query_start_loc_cpu=query_start_loc,
+    )
+    sas_metadata = torch.zeros(DSA_METADATA_BUFFER_SIZE, dtype=torch.int32)
+    qli_metadata = torch.ones(DSA_METADATA_BUFFER_SIZE, dtype=torch.int32)
+    builder._build_sas_metadata = MagicMock(return_value=sas_metadata)
+    builder._build_qli_metadata = MagicMock(return_value=qli_metadata)
+
+    with patch(
+        "vllm_ascend.attention.dsa_v1.get_full_cos_and_sin_dsa",
+        return_value=(torch.ones(1), torch.zeros(1)),
+    ):
+        req_metadata = builder.build_req_metadata(
+            common_attn_metadata=common_attn_metadata,
+            seq_lens_cpu=builder.seq_lens,
+            num_actual_reqs=None,
+            cos=torch.ones(3),
+            sin=torch.zeros(3),
+        )
+
+    builder._build_sas_metadata.assert_called_once()
+    assert req_metadata.sas_metadata is sas_metadata
+    if expect_qli_build:
+        builder._build_qli_metadata.assert_called_once()
+        assert req_metadata.qli_metadata is qli_metadata
+    else:
+        builder._build_qli_metadata.assert_not_called()
+        assert req_metadata.qli_metadata is None
 
 
 def test_build_req_metadata_for_drafting_uses_decode_buffer_and_cpu_lengths():

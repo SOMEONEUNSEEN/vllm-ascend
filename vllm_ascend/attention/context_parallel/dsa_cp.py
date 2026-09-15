@@ -968,13 +968,21 @@ class AscendDSACPMetadataBuilder(AttentionMetadataBuilder[AscendDSAMetadata]):
                 has_prefill=has_prefill,
                 cu_cmp_seqlen_list=cu_cmp_seqlens,
             )
-            qli_metadata = self._build_qli_metadata(
-                query_start_loc=local_query_start_loc,
-                seq_lens=local_seq_lens,
-                num_reqs=num_reqs,
-                max_seqlen_q=max_local_query_len,
-                max_seqlen_k=max_local_seq_lens,
-            )
+            # Only compressed (ratio-4) layers have a Lightning Indexer; the
+            # only consumer is the V4 indexer's select_topk. Non-compressed
+            # layers (e.g. dspark draft SWA, ratio 0) never run select_topk,
+            # so building their QLI metadata is dead work that the operator
+            # would reject for TP-sharded heads (index_n_heads != 64).
+            if self.compressor_ratio == 4:
+                qli_metadata = self._build_qli_metadata(
+                    query_start_loc=local_query_start_loc,
+                    seq_lens=local_seq_lens,
+                    num_reqs=num_reqs,
+                    max_seqlen_q=max_local_query_len,
+                    max_seqlen_k=max_local_seq_lens,
+                )
+            else:
+                qli_metadata = None
 
         cp_metadata = DSACPMetadata(
             local_query_start_loc=local_query_start_loc,
