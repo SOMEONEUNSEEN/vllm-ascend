@@ -196,8 +196,14 @@ def _request_counts(common: Any, num_reqs: int):
         or is_prefilling.device.type != "cpu"
     ):
         return 0, 0, 0, 0
-    flags = is_prefilling[:num_reqs].bool()
-    query_lens_cpu = query_start_loc_cpu[1 : num_reqs + 1] - query_start_loc_cpu[:num_reqs]
+    # Under FULL graph a mixed batch pads query_start_loc with one dummy
+    # request (see _pad_query_start_loc_for_fia), so query_start_loc_cpu can
+    # describe num_reqs rows while is_prefilling only carries the real
+    # requests. Trust the flags' own length: dummy rows count as decodes
+    # outside the flags mask, matching the real request counters.
+    num_flagged = min(num_reqs, is_prefilling.shape[0])
+    flags = is_prefilling[:num_flagged].bool()
+    query_lens_cpu = query_start_loc_cpu[1 : num_flagged + 1] - query_start_loc_cpu[:num_flagged]
     num_prefills = int(flags.sum().item())
     num_decodes = num_reqs - num_prefills
     num_prefill_tokens = int(query_lens_cpu[flags].sum().item())
