@@ -69,7 +69,6 @@ from vllm_ascend.utils import (
     enable_dsa_cp,
     normalize_deepseek_v41_config,
 )
-from vllm_ascend.worker.v2.attn_utils import ring_state_update_skipped
 
 from .compressor import DeepseekV41Compressor
 from .engram import (
@@ -1045,6 +1044,14 @@ class DeepseekV41Model(nn.Module, EagleModelMixin):
         columns = (config.engram_max_ngram_size - 1) * config.engram_n_heads
         hashes = torch.empty((0, len(config.engram_layer_ids), columns), dtype=torch.int64, device="cpu")
         mask = torch.empty(0, dtype=torch.bool, device="cpu")
+        # MRV2 dummy batches carry built metadata but no real requests; skip
+        # the history update so dummy tokens never pollute the n-gram store.
+        # Lazy import: attn_utils carries module-level code that assumes the
+        # upstream worker modules are already loaded, so importing it through
+        # the model registry path (early) raises AttributeError. The first
+        # forward runs long after worker init, when the import is safe.
+        from vllm_ascend.worker.v2.attn_utils import ring_state_update_skipped
+
         if history_inputs is not None and self.engram_history is not None and not ring_state_update_skipped():
             boundaries, block_table, block_size = history_inputs
             boundaries = boundaries.long()
