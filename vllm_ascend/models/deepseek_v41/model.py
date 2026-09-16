@@ -37,7 +37,6 @@ from vllm_ascend.models.deepseek_v4.model import (
     DeepseekV4Attention,
     DeepseekV4Model,
 )
-from vllm_ascend.worker.v2.attn_utils import ring_state_update_skipped
 
 from .compressor import DeepseekV41Compressor, _read, text_config_of
 from .engram_gate import engram_gate
@@ -534,6 +533,12 @@ class DeepseekV41Model(DeepseekV4Model):
         metadata = get_forward_context().attn_metadata
         # MRV2 dummy batches carry built metadata but no real requests; skip
         # the history update so dummy tokens never pollute the n-gram store.
+        # Lazy import: attn_utils carries module-level code that assumes the
+        # upstream worker modules are already loaded, so importing it through
+        # the model registry path (early) raises AttributeError. The first
+        # forward runs long after worker init, when the import is safe.
+        from vllm_ascend.worker.v2.attn_utils import ring_state_update_skipped
+
         if metadata is not None and self.engram_history is not None and not ring_state_update_skipped():
             first = self.layers[0].self_attn.dsa_attn.swa_cache_layer
             meta = metadata[first.prefix]
