@@ -69,6 +69,7 @@ from vllm_ascend.utils import (
     enable_dsa_cp,
     normalize_deepseek_v41_config,
 )
+from vllm_ascend.worker.v2.attn_utils import ring_state_update_skipped
 
 from .compressor import DeepseekV41Compressor
 from .engram import (
@@ -1044,7 +1045,7 @@ class DeepseekV41Model(nn.Module, EagleModelMixin):
         columns = (config.engram_max_ngram_size - 1) * config.engram_n_heads
         hashes = torch.empty((0, len(config.engram_layer_ids), columns), dtype=torch.int64, device="cpu")
         mask = torch.empty(0, dtype=torch.bool, device="cpu")
-        if history_inputs is not None and self.engram_history is not None:
+        if history_inputs is not None and self.engram_history is not None and not ring_state_update_skipped():
             boundaries, block_table, block_size = history_inputs
             boundaries = boundaries.long()
             n = int(boundaries[-1])
