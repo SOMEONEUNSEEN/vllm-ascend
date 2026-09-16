@@ -21,9 +21,18 @@ def engram_history_metadata(metadata):
     if request_metadata is None:
         request_metadata = metadata
     boundaries = getattr(request_metadata, "query_start_loc_cpu", None)
+    if boundaries is None:
+        raise ValueError("Engram requires query_start_loc_cpu in request metadata")
     block_table = getattr(request_metadata, "block_table_cpu", None)
-    if boundaries is None or block_table is None:
-        raise ValueError("Engram requires query_start_loc_cpu and block_table_cpu in request metadata")
+    if block_table is None:
+        # MRV2 keeps block tables device-side (StagedWriteTensor) and never
+        # builds AscendCommonAttentionMetadata.block_table_cpu. Mirror the
+        # rows here, at the same eager boundary where engram already syncs
+        # token and position rows to the host.
+        device_block_table = getattr(request_metadata, "block_table", None)
+        if device_block_table is None:
+            raise ValueError("Engram requires block_table_cpu or block_table in request metadata")
+        block_table = device_block_table.cpu()
     if boundaries.device.type != "cpu" or block_table.device.type != "cpu":
         raise ValueError("Engram request metadata mirrors must reside on CPU")
     return boundaries.long(), block_table, request_metadata.storage_block_size

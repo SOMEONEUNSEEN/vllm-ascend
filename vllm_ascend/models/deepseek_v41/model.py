@@ -37,6 +37,7 @@ from vllm_ascend.models.deepseek_v4.model import (
     DeepseekV4Attention,
     DeepseekV4Model,
 )
+from vllm_ascend.worker.v2.attn_utils import ring_state_update_skipped
 
 from .compressor import DeepseekV41Compressor, _read, text_config_of
 from .engram_gate import engram_gate
@@ -531,7 +532,9 @@ class DeepseekV41Model(DeepseekV4Model):
         hashes = torch.empty((0, len(config.engram_layer_ids), columns), dtype=torch.int64, device="cpu")
         mask = torch.empty(0, dtype=torch.bool, device="cpu")
         metadata = get_forward_context().attn_metadata
-        if metadata is not None and self.engram_history is not None:
+        # MRV2 dummy batches carry built metadata but no real requests; skip
+        # the history update so dummy tokens never pollute the n-gram store.
+        if metadata is not None and self.engram_history is not None and not ring_state_update_skipped():
             first = self.layers[0].self_attn.dsa_attn.swa_cache_layer
             meta = metadata[first.prefix]
             boundaries, block_table, block_size = engram_history_metadata(meta)
