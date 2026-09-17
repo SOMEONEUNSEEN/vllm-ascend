@@ -47,15 +47,15 @@ class AscendModelState(DefaultModelState):
         if prepare_engram_inputs is None:
             return model_inputs
         num_tokens = input_batch.num_tokens_after_padding
-        if self.kvpp_is_dummy_run:
-            # DP-peer and profile dummy batches carry no real tokens: expose
-            # the fixed capture buffers without the eager routing pass, so the
-            # n-gram history is never polluted by dummy tokens.
-            model_inputs.update(self.model.prepare_engram_graph_inputs(num_tokens))
-            return model_inputs
         # This hook runs before set_forward_context(), so hand the current
         # step's metadata (built by prepare_attn earlier in the same step)
-        # to the eager engram routing explicitly.
+        # to the eager engram routing explicitly. Dummy batches (DP-peer,
+        # profile) must route too: engram routing joins a node-local
+        # collective spanning every DP group, so skipping it on idle ranks
+        # leaves the busy ranks spinning inside route_many's all_gather.
+        # History pollution is already guarded: execute_dummy_batch sets
+        # ring_state_update_skipped(), and profile dummies (skip_attn) leave
+        # the metadata None, both of which prepare_engram honors.
         model_inputs.update(
             prepare_engram_inputs(
                 input_batch.input_ids[:num_tokens],
