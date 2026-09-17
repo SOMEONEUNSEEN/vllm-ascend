@@ -1033,7 +1033,7 @@ class DeepseekV41Model(nn.Module, EagleModelMixin):
     def embed_input_ids(self, input_ids):
         return self.embed_tokens(input_ids)
 
-    def prepare_engram(self, input_ids, positions, history_inputs=None):
+    def prepare_engram(self, input_ids, positions, history_inputs=None, *, metadata=None):
         """Route every DP using Runner's (CPU boundaries, pages, block size).
 
         Calls without attention metadata pass None and participate with empty hashes.
@@ -1052,6 +1052,21 @@ class DeepseekV41Model(nn.Module, EagleModelMixin):
         # forward runs long after worker init, when the import is safe.
         from vllm_ascend.worker.v2.attn_utils import ring_state_update_skipped
 
+        if history_inputs is None and metadata is not None and not ring_state_update_skipped():
+            first = self.layers[0].self_attn.dsa_attn.swa_cache_layer
+            meta = metadata[first.prefix]
+            meta = getattr(meta, "global_metadata", None) or meta
+            boundaries = meta.query_start_loc_cpu
+            if boundaries is None:
+                raise ValueError("Engram requires query_start_loc_cpu in request metadata")
+            # MRV2 keeps block tables on device. Mirror them at the eager
+            # boundary where Engram also synchronizes tokens and positions.
+            block_table = meta.block_table.cpu()
+            history_inputs = (
+                boundaries[: meta.num_actual_reqs + 1],
+                block_table[: meta.num_actual_reqs],
+                meta.storage_block_size,
+            )
         if history_inputs is not None and self.engram_history is not None and not ring_state_update_skipped():
             boundaries, block_table, block_size = history_inputs
             boundaries = boundaries.long()
@@ -1075,14 +1090,14 @@ class DeepseekV41Model(nn.Module, EagleModelMixin):
             lookups[layer_id] = values.flatten(1)
         return lookups, mask.to(positions.device)
 
-    def prepare_engram_inputs(self, input_ids, positions, padded_tokens=None, history_inputs=None):
+    def prepare_engram_inputs(self, input_ids, positions, padded_tokens=None, history_inputs=None, *, metadata=None):
         """Synchronously refresh the rows read by this forward, before replay."""
         graph_inputs = self.prepare_engram_graph_inputs(padded_tokens)
         if not graph_inputs["engram_lookups"]:
             return graph_inputs
         num_tokens = positions.shape[0]
         output_tokens = num_tokens if padded_tokens is None else padded_tokens
-        lookups, mask = self.prepare_engram(input_ids, positions, history_inputs)
+        lookups, mask = self.prepare_engram(input_ids, positions, history_inputs, metadata=metadata)
         buffers = graph_inputs["engram_lookups"]
         mask_buffer = graph_inputs["engram_mask"]
         mask_buffer[: mask.numel()].copy_(mask)
@@ -1223,8 +1238,8 @@ class AscendDeepseekV41LLMForCausalLM(nn.Module, DeepseekV41MixtureOfExperts, Su
     _DEFERRED_WEIGHT_MARKERS: tuple[str, ...] = ()
     _DEFERRED_WEIGHT_PREFIXES = ("aligner.", "vision.", "image_", "mtp.")
 
-    def prepare_engram_inputs(self, input_ids, positions, padded_tokens=None, history_inputs=None):
-        return self.model.prepare_engram_inputs(input_ids, positions, padded_tokens, history_inputs)
+    def prepare_engram_inputs(self, input_ids, positions, padded_tokens=None, history_inputs=None, *, metadata=None):
+        return self.model.prepare_engram_inputs(input_ids, positions, padded_tokens, history_inputs, metadata=metadata)
 
     def prepare_engram_graph_inputs(self, padded_tokens=None):
         return self.model.prepare_engram_graph_inputs(padded_tokens)
