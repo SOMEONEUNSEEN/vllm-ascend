@@ -267,13 +267,15 @@ def test_dspark_synthetic_rejection_sampling(
     # Acceptance health: both verify paths must reproduce the configured
     # rates. A broken rate index, u generation, or SYNTHETIC branch wiring
     # shifts the measured rates away from the configured ones.
-    for name, (stats_before, stats_after) in (
+    for name, (metrics_before, metrics_after) in (
         ("greedy", greedy_stats),
         ("sampled", sampled_stats),
     ):
-        drafts = stats_after[0] - stats_before[0]
+        drafts_before, accepted_before = metrics_before
+        drafts_after, accepted_after = metrics_after
+        drafts = drafts_after - drafts_before
         assert drafts > 0, f"No verify steps recorded for the {name} run"
-        acceptance_per_pos = [(a - b) / drafts for a, b in zip(stats_after[1], stats_before[1])]
+        acceptance_per_pos = [(a - b) / drafts for a, b in zip(accepted_after, accepted_before)]
         print(f"synthetic {name} acceptance_per_pos: {acceptance_per_pos}")
         match = all(abs(a - r) < tolerance for a, r in zip(acceptance_per_pos, rates))
         assert match, (
