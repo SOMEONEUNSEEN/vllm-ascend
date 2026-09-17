@@ -171,3 +171,112 @@ def test_dspark_probabilistic_spec_decoding(
     golden = [0.74, 0.48, 0.36, 0.27, 0.17, 0.10, 0.04]
     match = all(abs(a - b) < 0.2 for a, b in zip(acceptance_per_pos, golden))
     assert match, f"acceptance_per_pos {acceptance_per_pos} does not match golden {golden}"
+
+
+def _extract_acceptance_stats(metrics: list) -> tuple[int, list[int]]:
+    """Return cumulative (num_drafts, accepted_tokens_per_pos) from metrics."""
+    num_drafts = 0
+    accepted_per_pos: list[int] = []
+    for metric in metrics:
+        if metric.name == "vllm:spec_decode_num_drafts":
+            assert isinstance(metric, Counter)
+            num_drafts += metric.value
+        elif metric.name == "vllm:spec_decode_num_accepted_tokens_per_pos":
+            assert isinstance(metric, Vector)
+            if not accepted_per_pos:
+                accepted_per_pos = [0] * len(metric.values)
+            for pos in range(len(metric.values)):
+                accepted_per_pos[pos] += metric.values[pos]
+    return num_drafts, accepted_per_pos
+
+
+@pytest.mark.parametrize("model", DSPARK_MAIN_MODEL)
+@pytest.mark.parametrize("dspark_model", DSPARK_MODELS)
+@pytest.mark.parametrize("max_tokens", [48])
+@pytest.mark.parametrize("enforce_eager", [False])
+@patch.dict(os.environ, {"VLLM_USE_V2_MODEL_RUNNER": "1"})
+def test_dspark_synthetic_rejection_sampling(
+    model: str,
+    dspark_model: str,
+    max_tokens: int,
+    enforce_eager: bool,
+) -> None:
+    """DSpark spec decoding with synthetic rejection sampling.
+
+    Guards the SYNTHETIC_MODE branch of the NPU rejection sampling kernel
+    end to end. Acceptance is driven purely by u ~ U(0, 1) < conditional
+    rate, decoupled from draft quality, so the measured per-position
+    acceptance must match the configured synthetic_acceptance_rates — a
+    stronger assertion than a draft-quality golden. Both verify paths are
+    covered with one engine: temperature=0 exercises the greedy SYNTHETIC
+    branch (the NPU-specific scalar-random adaptation) and temperature=0.7
+    the non-greedy one; per-run rates are recovered from cumulative
+    metrics deltas.
+    """
+    prompts = [
+        "Hello, my name is",
+        "The president of the United States is",
+        "The capital of France is",
+        "The future of AI is",
+    ]
+    num_speculative_tokens = 7
+    # Unconditional per-position acceptance rates (must be non-increasing,
+    # one entry per draft position). The kernel loads the conditional rates
+    # (c_i = p_i / p_{i-1}), so the measured per-position acceptance must
+    # reproduce these values in distribution.
+    rates = [0.9, 0.7, 0.5, 0.4, 0.3, 0.2, 0.1]
+    # Tolerance: 4 * 48 = 192 verify steps per run; the worst-case binomial
+    # sigma (rate 0.4) is ~0.035, so 0.12 leaves >3.4 sigma of margin at
+    # every position.
+    tolerance = 0.12
+
+    def sampling_params(temperature: float, seed: int) -> SamplingParams:
+        return SamplingParams(
+            max_tokens=max_tokens,
+            temperature=temperature,
+            seed=seed,
+            ignore_eos=True,
+        )
+
+    with VllmRunner(
+        model,
+        max_model_len=1024,
+        enforce_eager=enforce_eager,
+        disable_log_stats=False,
+        async_scheduling=True,
+        speculative_config={
+            "model": dspark_model,
+            "method": "dspark",
+            "num_speculative_tokens": num_speculative_tokens,
+            "rejection_sample_method": "synthetic",
+            "synthetic_acceptance_rates": rates,
+        },
+    ) as runner:
+        outputs_greedy = runner.model.generate(prompts, sampling_params(0.0, 42))
+        greedy_stats = _extract_acceptance_stats(runner.model.get_metrics())
+        outputs_sampled = runner.model.generate(prompts, sampling_params(0.7, 1234))
+        sampled_stats = _extract_acceptance_stats(runner.model.get_metrics())
+
+    # Correctness: full-length, non-degenerate outputs.
+    for outputs in (outputs_greedy, outputs_sampled):
+        for output in outputs:
+            request_ids = output.outputs[0].token_ids
+            assert len(request_ids) == max_tokens
+            assert len(set(request_ids)) > 1, "Degenerate output: single repeated token"
+
+    # Acceptance health: both verify paths must reproduce the configured
+    # rates. A broken rate index, u generation, or SYNTHETIC branch wiring
+    # shifts the measured rates away from the configured ones.
+    for name, (stats_before, stats_after) in (
+        ("greedy", greedy_stats),
+        ("sampled", sampled_stats),
+    ):
+        drafts = stats_after[0] - stats_before[0]
+        assert drafts > 0, f"No verify steps recorded for the {name} run"
+        acceptance_per_pos = [(a - b) / drafts for a, b in zip(stats_after[1], stats_before[1])]
+        print(f"synthetic {name} acceptance_per_pos: {acceptance_per_pos}")
+        match = all(abs(a - r) < tolerance for a, r in zip(acceptance_per_pos, rates))
+        assert match, (
+            f"synthetic {name} acceptance_per_pos {acceptance_per_pos} does "
+            f"not match configured rates {rates} (tolerance {tolerance})"
+        )
