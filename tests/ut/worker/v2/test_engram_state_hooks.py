@@ -1,0 +1,93 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM Ascend project
+"""AscendModelState engram injection hooks for MRV2 graph execution.
+
+`prepare_inputs` must refresh the fixed-address engram buffers before every
+real replay/eager step (handing the step's attn metadata explicitly because
+the hook runs before set_forward_context), while dummy/profile batches only
+expose the capture buffers. `prepare_dummy_inputs` must bind those buffers
+during FULL graph capture so the eager prepare_engram path (ContextVar.get()
+inside) is never traced.
+"""
+
+from types import SimpleNamespace
+from unittest.mock import Mock
+
+import torch
+from vllm.v1.worker.gpu.model_states.default import DefaultModelState
+
+
+def _state(model, kvpp_is_dummy_run=False):
+    from vllm_ascend.worker.v2.model_states import default
+
+    state = default.AscendModelState.__new__(default.AscendModelState)
+    state.model = model
+    state.kvpp_is_dummy_run = kvpp_is_dummy_run
+    state.attn_metadata = "attn-metadata"
+    return state
+
+
+def _batch(num_tokens=8):
+    return SimpleNamespace(
+        input_ids=torch.arange(num_tokens, dtype=torch.int32),
+        positions=torch.arange(num_tokens, dtype=torch.int64),
+        num_tokens_after_padding=num_tokens,
+    )
+
+
+def _v41_model():
+    model = SimpleNamespace()
+    model.prepare_engram_inputs = Mock(return_value={"engram_lookups": {}, "engram_mask": torch.empty(0)})
+    model.prepare_engram_graph_inputs = Mock(return_value={"engram_lookups": {}, "engram_mask": torch.empty(0)})
+    return model
+
+
+def test_prepare_inputs_skips_models_without_engram(monkeypatch):
+    monkeypatch.setattr(DefaultModelState, "prepare_inputs", lambda self, batch, reqs: {"positions": None})
+    state = _state(SimpleNamespace())  # Non-V4.1 model: no engram methods.
+    assert state.prepare_inputs(_batch(), req_states=None) == {"positions": None}
+
+
+def test_prepare_inputs_routes_real_steps_with_step_metadata(monkeypatch):
+    monkeypatch.setattr(DefaultModelState, "prepare_inputs", lambda self, batch, reqs: {})
+    model = _v41_model()
+    state = _state(model, kvpp_is_dummy_run=False)
+    batch = _batch(num_tokens=8)
+
+    result = state.prepare_inputs(batch, req_states=None)
+
+    model.prepare_engram_inputs.assert_called_once_with(
+        batch.input_ids[:8], batch.positions[:8], 8, metadata="attn-metadata"
+    )
+    model.prepare_engram_graph_inputs.assert_not_called()
+    assert result == {"engram_lookups": {}, "engram_mask": torch.empty(0)}
+
+
+def test_prepare_inputs_dummy_runs_only_expose_capture_buffers(monkeypatch):
+    monkeypatch.setattr(DefaultModelState, "prepare_inputs", lambda self, batch, reqs: {})
+    model = _v41_model()
+    state = _state(model, kvpp_is_dummy_run=True)
+
+    result = state.prepare_inputs(_batch(num_tokens=8), req_states=None)
+
+    model.prepare_engram_graph_inputs.assert_called_once_with(8)
+    model.prepare_engram_inputs.assert_not_called()
+    assert "engram_lookups" in result
+
+
+def test_prepare_dummy_inputs_binds_capture_buffers(monkeypatch):
+    monkeypatch.setattr(DefaultModelState, "prepare_dummy_inputs", lambda self, num_reqs, num_tokens: {})
+    model = _v41_model()
+    state = _state(model)
+
+    result = state.prepare_dummy_inputs(num_reqs=4, num_tokens=64)
+
+    model.prepare_engram_graph_inputs.assert_called_once_with(64)
+    assert "engram_lookups" in result
+
+
+def test_prepare_dummy_inputs_skips_models_without_engram(monkeypatch):
+    monkeypatch.setattr(DefaultModelState, "prepare_dummy_inputs", lambda self, num_reqs, num_tokens: {})
+    state = _state(SimpleNamespace())
+
+    assert state.prepare_dummy_inputs(num_reqs=4, num_tokens=64) == {}

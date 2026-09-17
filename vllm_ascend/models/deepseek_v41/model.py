@@ -522,7 +522,7 @@ class DeepseekV41Model(DeepseekV4Model):
                     raise ValueError("Engram gate requires repeated block32 global rotation")
             self.engram_rotation.copy_(block)
 
-    def prepare_engram(self, input_ids, positions):
+    def prepare_engram(self, input_ids, positions, metadata=None):
         """Eager boundary: every DP participates, including metadata-free dummies."""
         config = self.config
         if not get_ascend_config().enable_engram:
@@ -530,7 +530,12 @@ class DeepseekV41Model(DeepseekV4Model):
         columns = (config.engram_max_ngram_size - 1) * config.engram_n_heads
         hashes = torch.empty((0, len(config.engram_layer_ids), columns), dtype=torch.int64, device="cpu")
         mask = torch.empty(0, dtype=torch.bool, device="cpu")
-        metadata = get_forward_context().attn_metadata
+        # MRV2 injects engram inputs from AscendModelState.prepare_inputs,
+        # which runs before set_forward_context(); the current step's metadata
+        # is passed explicitly there. Fall back to the forward context for
+        # MRV1-style callers that run inside it.
+        if metadata is None and is_forward_context_available():
+            metadata = get_forward_context().attn_metadata
         # MRV2 dummy batches carry built metadata but no real requests; skip
         # the history update so dummy tokens never pollute the n-gram store.
         # Lazy import: attn_utils carries module-level code that assumes the
@@ -563,7 +568,7 @@ class DeepseekV41Model(DeepseekV4Model):
             lookups[layer_id] = values.flatten(1)
         return lookups, mask.to(positions.device)
 
-    def prepare_engram_inputs(self, input_ids, positions, padded_tokens=None):
+    def prepare_engram_inputs(self, input_ids, positions, padded_tokens=None, metadata=None):
         """Synchronously refresh the rows read by this forward, before replay."""
         graph_inputs = self.prepare_engram_graph_inputs(padded_tokens)
         if not graph_inputs["engram_lookups"]:
@@ -572,7 +577,7 @@ class DeepseekV41Model(DeepseekV4Model):
         output_tokens = num_tokens if padded_tokens is None else padded_tokens
         if not num_tokens <= output_tokens <= self._engram_max_tokens:
             raise ValueError("Engram padded token count must cover the input and fit buffer capacity")
-        lookups, mask = self.prepare_engram(input_ids, positions)
+        lookups, mask = self.prepare_engram(input_ids, positions, metadata)
         if mask.numel() > num_tokens:
             raise ValueError("Engram query count exceeds the input token count")
         assert self._engram_input_buffers is not None
@@ -690,8 +695,8 @@ class AscendDeepseekV41ForCausalLM(AscendDeepseekV4ForCausalLM):
     _DEFERRED_WEIGHT_MARKERS: tuple[str, ...] = ()
     _DEFERRED_WEIGHT_PREFIXES = ("aligner.", "vision.", "image_", "mtp.")
 
-    def prepare_engram_inputs(self, input_ids, positions, padded_tokens=None):
-        return self.model.prepare_engram_inputs(input_ids, positions, padded_tokens)
+    def prepare_engram_inputs(self, input_ids, positions, padded_tokens=None, metadata=None):
+        return self.model.prepare_engram_inputs(input_ids, positions, padded_tokens, metadata)
 
     def prepare_engram_graph_inputs(self, padded_tokens=None):
         return self.model.prepare_engram_graph_inputs(padded_tokens)

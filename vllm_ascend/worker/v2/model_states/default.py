@@ -41,6 +41,41 @@ class AscendModelState(DefaultModelState):
     kvpp_runtime: "KVPPRuntime | None" = None
     kvpp_is_dummy_run: bool = False
 
+    def prepare_inputs(self, input_batch, req_states) -> dict[str, Any]:
+        model_inputs = super().prepare_inputs(input_batch, req_states)
+        prepare_engram_inputs = getattr(self.model, "prepare_engram_inputs", None)
+        if prepare_engram_inputs is None:
+            return model_inputs
+        num_tokens = input_batch.num_tokens_after_padding
+        if self.kvpp_is_dummy_run:
+            # DP-peer and profile dummy batches carry no real tokens: expose
+            # the fixed capture buffers without the eager routing pass, so the
+            # n-gram history is never polluted by dummy tokens.
+            model_inputs.update(self.model.prepare_engram_graph_inputs(num_tokens))
+            return model_inputs
+        # This hook runs before set_forward_context(), so hand the current
+        # step's metadata (built by prepare_attn earlier in the same step)
+        # to the eager engram routing explicitly.
+        model_inputs.update(
+            prepare_engram_inputs(
+                input_batch.input_ids[:num_tokens],
+                input_batch.positions[:num_tokens],
+                num_tokens,
+                metadata=self.attn_metadata,
+            )
+        )
+        return model_inputs
+
+    def prepare_dummy_inputs(self, num_reqs: int, num_tokens: int) -> dict[str, Any]:
+        model_inputs = super().prepare_dummy_inputs(num_reqs, num_tokens)
+        prepare_engram_graph_inputs = getattr(self.model, "prepare_engram_graph_inputs", None)
+        if prepare_engram_graph_inputs is not None:
+            # Capture binds the fixed-address engram buffers so replay never
+            # traces the eager prepare_engram path (ContextVar.get() inside
+            # is not dynamo-safe).
+            model_inputs.update(prepare_engram_graph_inputs(num_tokens))
+        return model_inputs
+
     def prepare_attn(
         self,
         input_batch: AscendInputBatch,
