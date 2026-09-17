@@ -54,14 +54,14 @@ class AscendModelState(DefaultModelState):
         # collective spanning every DP group, so skipping it on idle ranks
         # leaves the busy ranks spinning inside route_many's all_gather.
         # History pollution is already guarded: execute_dummy_batch sets
-        # ring_state_update_skipped(), and profile dummies (skip_attn) leave
-        # the metadata None, both of which prepare_engram honors.
+        # ring_state_update_skipped(), and profile dummies (skip_attn) never
+        # build metadata, both of which prepare_engram honors.
         model_inputs.update(
             prepare_engram_inputs(
                 input_batch.input_ids[:num_tokens],
                 input_batch.positions[:num_tokens],
                 num_tokens,
-                metadata=self.attn_metadata,
+                metadata=getattr(self, "attn_metadata", None),
             )
         )
         return model_inputs
