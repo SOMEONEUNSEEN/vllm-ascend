@@ -199,9 +199,15 @@ def _request_counts(common: Any, num_reqs: int):
     ):
         return 0, 0, 0, 0
     flags = is_prefilling[:num_reqs].bool()
-    query_lens_cpu = query_start_loc_cpu[1 : num_reqs + 1] - query_start_loc_cpu[:num_reqs]
+    # Slice bounds must follow is_prefilling's own length: MRV2 keeps the real
+    # request count (no padding) while query_start_loc_cpu is padded, so indexing
+    # query_lens with num_reqs (padded) mismatches the mask. Padded requests sit
+    # at the tail, are flagged False, and contribute no counted tokens.
+    num_flags = min(flags.numel(), query_start_loc_cpu.numel() - 1)
+    flags = flags[:num_flags]
+    query_lens_cpu = query_start_loc_cpu[1 : num_flags + 1] - query_start_loc_cpu[:num_flags]
     num_prefills = int(flags.sum().item())
-    num_decodes = num_reqs - num_prefills
+    num_decodes = num_flags - num_prefills
     num_prefill_tokens = int(query_lens_cpu[flags].sum().item())
     num_decode_tokens = int(query_lens_cpu[~flags].sum().item())
     return num_decodes, num_decode_tokens, num_prefills, num_prefill_tokens
@@ -462,7 +468,15 @@ class AscendDSAV41Impl:
             candidate_block_size=self.topology.candidate_block_size,
             candidates=shared.candidates[: hidden_states.shape[0]],
         )
-        shared.topk_indices[: selected.shape[0]].copy_(selected)
+        if selected.shape[-1] == 0:
+            # Empty compressed source (e.g. first decode before any completed
+            # compression group): the indexer signals "no sparse indices" with
+            # a zero-width selection. Fill the shared buffer rows with -1 —
+            # the same invalid marker pad_sparse_indices uses — so the
+            # compressed stage is skipped (cmp_seq_lens are 0 here anyway).
+            shared.topk_indices[: selected.shape[0]].fill_(-1)
+        else:
+            shared.topk_indices[: selected.shape[0]].copy_(selected)
         if self.role.is_candidate_source:
             shared.candidates[: candidates.shape[0]].copy_(candidates)
         return shared.topk_indices[: selected.shape[0]]
