@@ -2,7 +2,6 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
 import torch
-import torch.nn.functional as F
 from vllm.distributed import (
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
@@ -37,7 +36,9 @@ def _ascend_sp_shard_impl(x: torch.Tensor) -> torch.Tensor:
     # Upstream counterpart: vllm/models/common/ops/sequence_parallel.py
     # sp_shard L45-48 (introduced in 38a466e7b6, #46789).
     if sp_pad > 0:
-        x = F.pad(x, (0, 0) * (x.ndim - 1) + (0, sp_pad))
+        pad_shape = list(x.shape)
+        pad_shape[0] = sp_pad
+        x = torch.cat([x, x.new_zeros(pad_shape)], dim=0)
     chunk = x.shape[0] // tp_size
     out = x[tp_rank * chunk : (tp_rank + 1) * chunk]
     return out.clone() if sp_pad == 0 else out
@@ -117,7 +118,7 @@ def _ascend_sp_padding_mask_impl(is_padding: torch.Tensor) -> torch.Tensor:
     # Upstream counterpart: vllm/models/common/ops/sequence_parallel.py
     # sp_padding_mask L63-65.
     if sp_pad > 0:
-        is_padding = F.pad(is_padding, (0, sp_pad), value=True)
+        is_padding = torch.cat([is_padding, is_padding.new_ones((sp_pad,))], dim=0)
     chunk = is_padding.shape[0] // tp_size
     out = is_padding[tp_rank * chunk : (tp_rank + 1) * chunk]
     return out.clone() if sp_pad == 0 else out
