@@ -25,7 +25,6 @@ import torch
 import torch_npu
 
 from vllm_ascend.ops.fused_moe.moe_utils import maybe_normalize_mxfp_scale_layout
-from vllm_ascend.quantization.prepared_linear_input import PreparedLinearInput
 from vllm_ascend.quantization.quant_type import QuantType
 from vllm_ascend.weight_switch import (
     WeightLoadPartition,
@@ -42,7 +41,6 @@ __all__ = [
     "AscendAttentionScheme",
     "AscendLinearScheme",
     "AscendMoEScheme",
-    "PreparedLinearInput",
     "QuantType",
     "WeightLoadPartition",
     "WeightSwitchConfig",
@@ -135,20 +133,6 @@ class AscendLinearScheme(WeightSwitchMixin, ABC):
             Dictionary mapping parameter names to empty tensors.
         """
         return {}
-
-    def prepare_input_for_overlap(
-        self,
-        layer: torch.nn.Module,
-        x: torch.Tensor,
-    ) -> PreparedLinearInput | None:
-        """Optionally prepare an input before a multistream scheduling barrier.
-
-        The returned object must be accepted by this scheme's ``apply``
-        method. Returning ``None`` keeps the original wrapped execution path.
-        Schemes should opt in only when moving their input preprocessing does
-        not change dtype, shape, padding, scale, or LoRA semantics.
-        """
-        return None
 
     @abstractmethod
     def apply(

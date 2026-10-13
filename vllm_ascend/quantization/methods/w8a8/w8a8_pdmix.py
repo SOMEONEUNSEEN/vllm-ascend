@@ -27,7 +27,7 @@ from typing import Any
 import torch
 from vllm.config import get_current_vllm_config
 
-from ..base import AscendLinearScheme, PreparedLinearInput
+from ..base import AscendLinearScheme
 from ..registry import register_scheme
 from .w8a8_dynamic import AscendW8A8DynamicLinearMethod
 from .w8a8_static import AscendW8A8LinearMethod
@@ -67,18 +67,10 @@ class AscendW8A8PDMixLinearMethod(AscendLinearScheme):
     ) -> dict[str, Any]:
         return self._static_method.get_perchannel_param(output_size, params_dtype)
 
-    def prepare_input_for_overlap(
-        self,
-        layer: torch.nn.Module,
-        x: torch.Tensor,
-    ) -> PreparedLinearInput | None:
-        method = self._static_method if layer.is_kv_consumer else self._dynamic_method
-        return method.prepare_input_for_overlap(layer, x)
-
     def apply(
         self,
         layer: torch.nn.Module,
-        x: torch.Tensor | PreparedLinearInput,
+        x: torch.Tensor,
         bias: torch.Tensor | None = None,
         tp_rank: int | None = 0,
     ) -> torch.Tensor:
