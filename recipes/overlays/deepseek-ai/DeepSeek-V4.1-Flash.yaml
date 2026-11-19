@@ -3,7 +3,7 @@
 # Base recipe: https://github.com/vllm-project/vllm/blob/f91a7779cad81443345f326386a996e6488b27e2/recipes/models/deepseek-ai/DeepSeek-V4.1-Flash.yaml
 
 meta:
-  date_updated: 2026-11-17
+  date_updated: 2026-11-19
   hardware:
     ascend_910b: supported
     ascend_910c: supported
@@ -58,11 +58,11 @@ variants:
       VLLM_ENGINE_READY_TIMEOUT_S: "36000"
       PYTORCH_NPU_ALLOC_CONF: "expandable_segments:True"
       HCCL_BUFFSIZE: "1024"
-      HCCL_OP_EXPANSION_MODE: "AIV"
     hardware_overrides:
       ascend_910c:
         docker_image: "quay.io/ascend/vllm-ascend:v0.32.0rc1-a3@sha256:0ab8c92a89d36bbf33eb7bbf3d5bbfe661f520e8fcecaf3823e80b48d3a80afc"
         docker_serve_command: "vllm serve"
+        docker_ipc: host
         install:
           pip: false
 
@@ -122,6 +122,7 @@ variants:
       ascend_910b:
         docker_image: "quay.io/ascend/vllm-ascend:v0.32.0rc1@sha256:ff6d1ea57df08dd9382c51d202d0dd2d9acc35d53a65bcb0dfd906886e674912"
         docker_serve_command: "vllm serve"
+        docker_ipc: host
         install:
           pip: false
 
@@ -193,8 +194,10 @@ features:
 strategy_min_gpus:
   ascend_910b:
     multi_node_tp_dp: 16
+    pd_cluster: 16
   ascend_910c:
     single_node_tp: 16
+    pd_cluster: 32
   ascend_950dt:
     single_node_tp: 8
     pd_cluster: 16
@@ -221,7 +224,16 @@ strategy_hardware:
     npu: unsupported
   pd_cluster:
     npu: unsupported
+    ascend_910b: supported
+    ascend_910c: supported
     ascend_950dt: supported
+
+strategy_overrides:
+  single_node_tp:
+    hardware_overrides:
+      ascend_910c:
+        extra_env:
+          HCCL_OP_EXPANSION_MODE: "AIV"
 
 presets:
   ascend_a3_w4a8:
@@ -397,7 +409,259 @@ presets:
 
       ## Limits
 
-      The source tutorial labels this PD deployment a reference design, not its production recommendation. Each role has one pool; independent replica groups, A2/A3 PCP layouts, Memcache pooling and wide-EP Decode extensions are not represented. Baseline and other Router/Connector choices are outside this preset's validation scope.
+      The source tutorial labels this PD deployment a reference design, not its production recommendation. Each role has one pool; independent replica groups, Memcache pooling and wide-EP Decode extensions are not represented. Baseline and other Router/Connector choices are outside this preset's validation scope.
+
+  ascend_a2_w4a8_pd_pcp4:
+    label: A2 W4A8 PD (Prefill DP2/PCP4, Decode DP8)
+    hardware: ascend_910b
+    strategy: pd_cluster
+    router_port: 2999
+    variants: [ascend_w4a8_a2]
+    default: false
+    description: One Atlas 800 A2 node per role. Each Prefill request spans four devices at TP1. Each Decode engine
+      uses one device.
+    source:
+      label: DeepSeek-V4.1-Flash RC tutorial, section 5.2 (A2)
+      href: https://github.com/vllm-project/vllm-ascend/blob/24487f4f48ee99cf45d86d1c504e645549b8c1ef/docs/source/tutorials/models/DeepSeek-V4.1-Flash.md#52-1p1d-pd-disaggregated-deployment
+      revision: 24487f4f48ee99cf45d86d1c504e645549b8c1ef
+      key: dsv41flash-w4a8-a2-1p1d-pcp4
+    image:
+      vllm: quay.io/ascend/vllm-ascend:v0.32.0rc1@sha256:ff6d1ea57df08dd9382c51d202d0dd2d9acc35d53a65bcb0dfd906886e674912
+      model_revision: 2701ad74996ab465759ea37e2e7df132709716e9
+    select:
+      frontend: python
+      pd_router: ascend
+      pd_connector: mooncake_ascend
+      kv_offload: 'off'
+      features:
+        tool_calling: true
+        reasoning: true
+        spec_decoding: true
+    args:
+      - --seed
+      - '1024'
+      - --served-model-name
+      - dsv41
+      - --max-model-len
+      - '1048576'
+    env:
+      VLLM_MODEL_REDIRECT_PATH: /root/.cache/huggingface/dsv41-pcp4/model-redirect.json
+      VLLM_USE_MODELSCOPE: "0"
+      HF_HUB_OFFLINE: "1"
+      LD_LIBRARY_PATH: $ASCEND_PD_LD_LIBRARY_PATH
+      http_proxy: ''
+      https_proxy: ''
+      no_proxy: 127.0.0.1,localhost,$PREFILL_NODE_1,$DECODE_NODE_1
+    remove_args: [--data-parallel-hybrid-lb]
+    roles:
+      prefill:
+        nodes: 1
+        parallelism: dep
+        tp: 1
+        pp: 1
+        pcp: 4
+        args:
+          - --port
+          - '7100'
+          - --data-parallel-rpc-port
+          - '12321'
+          - --max-num-batched-tokens
+          - '4096'
+          - --max-num-seqs
+          - '16'
+          - --gpu-memory-utilization
+          - '0.97'
+          - --additional-config
+          - '{"enable_cpu_binding":true,"enable_fused_mc2":1,"enable_flashcomm1":false,"enable_shared_expert_dp":true}'
+          - --enforce-eager
+          - --swa-bounded-replay
+          - --enable-prefix-caching
+        env:
+          VLLM_HOST_IP: $PREFILL_NODE_1
+          HCCL_IF_IP: $PREFILL_NODE_1
+          GLOO_SOCKET_IFNAME: $IFACE_NAME
+          TP_SOCKET_IFNAME: $IFACE_NAME
+          HCCL_SOCKET_IFNAME: $IFACE_NAME
+          HCCL_BUFFSIZE: '1024'
+          HCCL_OP_EXPANSION_MODE: AIV
+        remove_args: [--async-scheduling, --compilation-config, --no-enable-prefix-caching, --no-swa-bounded-replay]
+        json_args:
+          --kv-transfer-config:
+            MooncakeConnectorV2:
+              kv_connector: MooncakeHybridConnector
+              kv_port: '30000'
+              engine_id: '0'
+      decode:
+        nodes: 1
+        parallelism: dep
+        tp: 1
+        pp: 1
+        pcp: 1
+        args:
+          - --port
+          - '7100'
+          - --data-parallel-rpc-port
+          - '12321'
+          - --max-num-batched-tokens
+          - '512'
+          - --max-num-seqs
+          - '72'
+          - --gpu-memory-utilization
+          - '0.97'
+          - --additional-config
+          - '{"enable_cpu_binding":true,"ascend_compilation_config":{"enable_npugraph_ex":true,"enable_static_kernel":false},"multistream_overlap_shared_expert":true,"recompute_scheduler_enable":true,"enable_flashcomm1":false}'
+          - --async-scheduling
+          - --no-swa-bounded-replay
+          - --no-enable-prefix-caching
+          - --compilation-config
+          - '{"cudagraph_mode":"FULL_DECODE_ONLY"}'
+          - --kv-cache-memory-bytes
+          - '4600000000'
+        env:
+          VLLM_HOST_IP: $DECODE_NODE_1
+          HCCL_IF_IP: $DECODE_NODE_1
+          GLOO_SOCKET_IFNAME: $IFACE_NAME
+          TP_SOCKET_IFNAME: $IFACE_NAME
+          HCCL_SOCKET_IFNAME: $IFACE_NAME
+          HCCL_BUFFSIZE: '1800'
+        remove_args: [--enable-prefix-caching, --swa-bounded-replay, --enforce-eager]
+        json_args:
+          --kv-transfer-config:
+            MooncakeConnectorV2:
+              kv_connector: MooncakeHybridConnector
+              kv_port: '30100'
+              engine_id: '1'
+          --speculative-config:
+            enforce_eager: true
+    runbook: |
+      Use two Atlas 800 A2 servers with 8 logical NPUs each, the pinned release image and host IPC for Engram sharing. On each host, set `PREFILL_NODE_1`, `DECODE_NODE_1` and `IFACE_NAME` to the service IPs and the local HCCL interface. Set `ASCEND_PD_LD_LIBRARY_PATH` from the initialized release image as shown in the Ascend guide.
+
+      Stage the W4A8 checkpoint and its model redirect on both hosts as shown in the Ascend guide. Clients use the served model name `dsv41`.
+
+      The proxy needs 2 Prefill endpoints on ports 7100–7101 and 8 Decode endpoints on ports 7100–7107. Each node uses DP RPC port 12321. The KV handshake base ports are 30000 on Prefill and 30100 on Decode. Set `ROUTER_HOST` to the proxy address and `ROUTER_PORT=2999` as in the A2 example. The Builder uses this port by default. Wait for every backend's `/health`, confirm that `/v1/models` lists `dsv41`, then send a chat request through the proxy and verify KV transfer in the two role logs.
+
+  ascend_a3_w4a8_pd_pcp4:
+    label: A3 W4A8 PD (Prefill DP4/PCP4, Decode DP16)
+    hardware: ascend_910c
+    strategy: pd_cluster
+    router_port: 2999
+    variants: [ascend_w4a8_a3]
+    default: false
+    description: One Atlas 800 A3 node per role. Each Prefill request spans four devices at TP1. Each Decode engine
+      uses one device.
+    source:
+      label: DeepSeek-V4.1-Flash RC tutorial, section 5.2 (A3)
+      href: https://github.com/vllm-project/vllm-ascend/blob/24487f4f48ee99cf45d86d1c504e645549b8c1ef/docs/source/tutorials/models/DeepSeek-V4.1-Flash.md#52-1p1d-pd-disaggregated-deployment
+      revision: 24487f4f48ee99cf45d86d1c504e645549b8c1ef
+      key: dsv41flash-w4a8-a3-1p1d-pcp4
+    image:
+      vllm: quay.io/ascend/vllm-ascend:v0.32.0rc1-a3@sha256:0ab8c92a89d36bbf33eb7bbf3d5bbfe661f520e8fcecaf3823e80b48d3a80afc
+      model_revision: 2701ad74996ab465759ea37e2e7df132709716e9
+    select:
+      frontend: python
+      pd_router: ascend
+      pd_connector: mooncake_ascend
+      kv_offload: 'off'
+      features:
+        tool_calling: true
+        reasoning: true
+        spec_decoding: true
+    args:
+      - --seed
+      - '1024'
+      - --served-model-name
+      - dsv41
+      - --max-model-len
+      - '1048576'
+    env:
+      VLLM_MODEL_REDIRECT_PATH: /root/.cache/huggingface/dsv41-pcp4/model-redirect.json
+      VLLM_USE_MODELSCOPE: "0"
+      HF_HUB_OFFLINE: "1"
+      LD_LIBRARY_PATH: $ASCEND_PD_LD_LIBRARY_PATH
+      http_proxy: ''
+      https_proxy: ''
+    remove_args: [--data-parallel-hybrid-lb]
+    roles:
+      prefill:
+        nodes: 1
+        parallelism: dep
+        tp: 1
+        pp: 1
+        pcp: 4
+        args:
+          - --port
+          - '7100'
+          - --data-parallel-rpc-port
+          - '12321'
+          - --max-num-batched-tokens
+          - '8192'
+          - --max-num-seqs
+          - '16'
+          - --gpu-memory-utilization
+          - '0.9'
+          - --additional-config
+          - '{"enable_cpu_binding":true,"enable_fused_mc2":2,"enable_flashcomm1":false,"multistream_overlap_shared_expert":false}'
+          - --enforce-eager
+          - --swa-bounded-replay
+          - --enable-prefix-caching
+        env:
+          VLLM_HOST_IP: $PREFILL_NODE_1
+          HCCL_IF_IP: $PREFILL_NODE_1
+          GLOO_SOCKET_IFNAME: $IFACE_NAME
+          TP_SOCKET_IFNAME: $IFACE_NAME
+          HCCL_SOCKET_IFNAME: $IFACE_NAME
+          HCCL_BUFFSIZE: '1024'
+          HCCL_OP_EXPANSION_MODE: AIV
+        remove_args: [--async-scheduling, --compilation-config, --no-enable-prefix-caching, --no-swa-bounded-replay]
+        json_args:
+          --kv-transfer-config:
+            MooncakeConnectorV2:
+              kv_connector: MooncakeHybridConnector
+              kv_port: '30000'
+      decode:
+        nodes: 1
+        parallelism: dep
+        tp: 1
+        pp: 1
+        pcp: 1
+        args:
+          - --port
+          - '7100'
+          - --data-parallel-rpc-port
+          - '12321'
+          - --max-num-batched-tokens
+          - '512'
+          - --max-num-seqs
+          - '72'
+          - --gpu-memory-utilization
+          - '0.95'
+          - --additional-config
+          - '{"enable_cpu_binding":true,"ascend_compilation_config":{"enable_npugraph_ex":true,"enable_static_kernel":false},"multistream_overlap_shared_expert":true,"recompute_scheduler_enable":true}'
+          - --async-scheduling
+          - --no-swa-bounded-replay
+          - --no-enable-prefix-caching
+          - --compilation-config
+          - '{"cudagraph_mode":"FULL_DECODE_ONLY"}'
+        env:
+          VLLM_HOST_IP: $DECODE_NODE_1
+          HCCL_IF_IP: $DECODE_NODE_1
+          GLOO_SOCKET_IFNAME: $IFACE_NAME
+          TP_SOCKET_IFNAME: $IFACE_NAME
+          HCCL_SOCKET_IFNAME: $IFACE_NAME
+          HCCL_BUFFSIZE: '4096'
+        remove_args: [--enable-prefix-caching, --swa-bounded-replay, --enforce-eager]
+        json_args:
+          --kv-transfer-config:
+            MooncakeConnectorV2:
+              kv_connector: MooncakeHybridConnector
+              kv_port: '30100'
+    runbook: |
+      Use two Atlas 800 A3 servers with 16 logical NPUs each, the pinned release image and host IPC for Engram sharing. On each host, set `PREFILL_NODE_1`, `DECODE_NODE_1` and `IFACE_NAME` to the service IPs and the local HCCL interface. Set `ASCEND_PD_LD_LIBRARY_PATH` from the initialized release image as shown in the Ascend guide.
+
+      Stage the W4A8 checkpoint and its model redirect on both hosts as shown in the Ascend guide. Clients use the served model name `dsv41`.
+
+      The proxy needs 4 Prefill endpoints on ports 7100–7103 and 16 Decode endpoints on ports 7100–7115. Each node uses DP RPC port 12321. The KV handshake base ports are 30000 on Prefill and 30100 on Decode. Set `ROUTER_HOST` to the proxy address and `ROUTER_PORT=2999` for this deployment; the A3 tutorial leaves the proxy's listening port configurable. The Builder uses this port by default. Wait for every backend's `/health`, confirm that `/v1/models` lists `dsv41`, then send a chat request through the proxy and verify KV transfer in the two role logs.
+
 notes:
   - title: "Use the qualified Ascend PD preset"
     when:
@@ -410,13 +674,13 @@ notes:
 hardware_notes:
   ascend_910b:
     title: "Two A2 nodes required"
-    body: "Use the ascend_w4a8_a2 variant and two Atlas 800I A2 nodes. The generated multi_node_tp_dp command preserves TP8/DP2/EP16 and per-node DP ranks. Set LOCAL_IP and IFACE_NAME on each node. The source validates startup, text/image smoke requests and 16K-input serving only. Follower API exposure differs from the tutorial: this strategy does not emit --headless for TP+DP followers."
+    body: "Use two eight-device Atlas 800I A2 nodes. For colocated serving, ascend_a2_w4a8 uses TP8/DP2/EP16 and requires LOCAL_IP and IFACE_NAME on each node. The tutorial reports startup, text/image smoke requests and 16K-input serving for that layout. The tutorial starts its follower with --headless, which the TP+DP command omits. For disaggregated serving, ascend_a2_w4a8_pd_pcp4 dedicates one node to DP2/PCP4 Prefill and one to DP8 Decode."
     link:
       href: "https://docs.vllm.ai/projects/ascend/en/v0.32.0rc/tutorials/models/DeepSeek-V4.1-Flash.html"
       label: "DeepSeek-V4.1-Flash RC tutorial"
   ascend_910c:
-    title: "A3 W4A8 single-node layout"
-    body: "Use ascend_w4a8_a3 for the documented TP4/DP4 layout on all 16 logical devices. The command keeps Engram tables in shared host memory and requires an IPC/shared-memory configuration that lets four local DP ranks share them. W8A8, PCP-based PD and external KV pools are not emitted by this overlay."
+    title: "A3 W4A8 colocated and disaggregated serving"
+    body: "Use ascend_a3_w4a8 on one 16-device A3 node for TP4/DP4. With two nodes, ascend_a3_w4a8_pd_pcp4 dedicates one to DP4/PCP4 Prefill and one to DP16 Decode. Both configurations use shared host memory for the Engram tables."
     link:
       href: "https://docs.vllm.ai/projects/ascend/en/v0.32.0rc/tutorials/models/DeepSeek-V4.1-Flash.html"
       label: "DeepSeek-V4.1-Flash RC tutorial"
@@ -431,7 +695,7 @@ guide_sections:
   ascend: |
     ## Ascend overview
 
-    This overlay contributes four source-documented configurations from the
+    This overlay contributes six configurations from the
     [DeepSeek-V4.1-Flash v0.32.0rc tutorial](https://docs.vllm.ai/projects/ascend/en/v0.32.0rc/tutorials/models/DeepSeek-V4.1-Flash.html).
     Hardware status is **supported**, not a new migration-time verification claim.
     Pick an `ascend_*` variant explicitly: inherited `default` and `fp8` variants
@@ -441,6 +705,8 @@ guide_sections:
     | --- | --- | --- |
     | Atlas 800 A3, 16× 910C | [ascend_w4a8_a3](https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4.1-Flash?hardware=ascend_910c&variant=ascend_w4a8_a3&strategy=single_node_tp&preset=ascend_a3_w4a8) | One node, TP4/DP4 + EP, 150K maximum total sequence length |
     | Atlas 800I A2, 2× 8× 910B | [ascend_w4a8_a2](https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4.1-Flash?hardware=ascend_910b&variant=ascend_w4a8_a2&strategy=multi_node_tp_dp&nodes=2&preset=ascend_a2_w4a8) | Two nodes, node-local TP8, global DP2 + EP16, DSpark |
+    | Atlas 800I A2, 2× 8× 910B | `ascend_a2_w4a8_pd_pcp4` | 1P1D, TP1 on both nodes, DP2/PCP4 Prefill and DP8 Decode, MooncakeHybridConnector |
+    | Atlas 800 A3, 2× 16× 910C | `ascend_a3_w4a8_pd_pcp4` | 1P1D, TP1 on both nodes, DP4/PCP4 Prefill and DP16 Decode, MooncakeHybridConnector |
     | Ascend 950DT, 8 NPUs | [ascend_mxfp_a5](https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4.1-Flash?hardware=ascend_950dt&variant=ascend_mxfp_a5&strategy=single_node_tp&preset=ascend_a5_mxfp) | One node, TP1/DP8 + EP8, DSpark, 1M maximum model length |
     | Ascend 950DT, 2× 8 NPUs | [ascend_a5_pd](https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4.1-Flash?hardware=ascend_950dt&variant=ascend_mxfp_a5&strategy=pd_cluster&preset=ascend_a5_pd) | Reference 1P1D, DP8/TP1 per role, Ascend Router + MooncakeHybridConnector |
 
@@ -463,10 +729,48 @@ guide_sections:
       and shared memory for Engram offload and local-DP sharing. Multi-node and
       PD deployments additionally need reachable HCCL, DP RPC, HTTP and KV ports.
 
+
+    ## Prepare the A2/A3 PCP4 nodes
+
+    Use the same checkpoint on both dedicated nodes. The two presets resolve
+    the model ID and tokenizer to a fixed local Git LFS checkout through
+    `VLLM_MODEL_REDIRECT_PATH`. The generated Docker commands mount the host's
+    `~/.cache/huggingface` at `/root/.cache/huggingface`. Run these commands on
+    each host, or copy the verified directory and JSON file to the second host.
+
+    ```bash
+    root="$HOME/.cache/huggingface/dsv41-pcp4"
+    weights="$root/DeepSeek-V4.1-Flash-1017-w4a8"
+    revision=2701ad74996ab465759ea37e2e7df132709716e9
+    mkdir -p "$root"
+    GIT_LFS_SKIP_SMUDGE=1 git clone --no-checkout https://www.modelscope.cn/Eco-Tech/DeepSeek-V4.1-Flash-1017-w4a8.git "$weights"
+    GIT_LFS_SKIP_SMUDGE=1 git -C "$weights" checkout --detach "$revision"
+    git -C "$weights" lfs pull origin
+    test "$(git -C "$weights" rev-parse HEAD)" = "$revision" && git -C "$weights" lfs fsck
+    printf '%s\n' '{"Eco-Tech/DeepSeek-V4.1-Flash-1017-w4a8":"/root/.cache/huggingface/dsv41-pcp4/DeepSeek-V4.1-Flash-1017-w4a8"}' > "$root/model-redirect.json"
+    ```
+
+    Set `PREFILL_NODE_1` and `DECODE_NODE_1` to the nodes' routable service IPs
+    and `IFACE_NAME` to the local service interface. For Docker, set `IMAGE` to
+    the preset's full image reference. Obtain the library search path from
+    that same image so the command includes its initialized Ascend libraries.
+
+    ```bash
+    export ASCEND_PD_LD_LIBRARY_PATH="$(docker run --rm -v /usr/local/Ascend/driver:/usr/local/Ascend/driver:ro "$IMAGE" bash -c 'printf "\n%s\n" "${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}/usr/local/lib/"' | tail -n 1)"
+    ```
+
+    Inside an existing initialized container, use
+    `export ASCEND_PD_LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}/usr/local/lib/"`.
+    The Router defaults to `2999`. Keep it distinct from Prefill's Mooncake
+    handshake port `30000` when running the proxy on the Prefill host.
+
     ## Client usage
 
-    No variant sets `--served-model-name`; set `SERVED_MODEL_ID` to the selected
-    checkpoint id returned by `/v1/models`.
+    For the A2/A3 PCP4 presets, use `SERVED_MODEL_ID=dsv41` and set
+    `SERVICE_URL` to the Router's `http://HOST:PORT/v1`. For the other
+    presets, use the checkpoint ID advertised by `/v1/models`. If using a generated
+    Verify or Benchmark example with a PCP4 preset, set the request model
+    to `dsv41` (for `vllm bench serve`, pass `--served-model-name dsv41`).
 
     ```python
     import os
@@ -487,10 +791,8 @@ guide_sections:
 
     - W8A8 is listed by the tutorial, but this minimal migration does not add a
       W8A8 variant without a dedicated rendered-command and runtime evidence set.
-    - A2/A3 PD uses TP1+PCP4 Prefill layouts. Current PD DEP topology derives
-      local DP only from `devices_per_node / tp`, so these layouts are linked to
-      the tutorial rather than emitted incorrectly. Memcache and Mooncake KV
-      Cache Pool deployments also remain tutorial-only.
+    - The A2/A3 PCP4 presets cover section 5.2 with direct Mooncake KV transfer.
+      See the tutorial for Memcache and Mooncake KV Cache Pool deployments.
     - The 950DT PD preset replaces the custom per-rank launcher with native
       external-DP supervision. It is an opt-in reference design; production
       deployment should follow the tutorial's MindIE Motor recommendation.
